@@ -28,6 +28,9 @@ const App: React.FC = () => {
     const [hasSignature, setHasSignature] = useState(false);
     const [requiresPassword, setRequiresPassword] = useState(false);
     const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
+    
+    // NEW: State for capacity tracking
+    const [maxChars, setMaxChars] = useState(0);
 
     const notify = (type: 'success' | 'error', msg: string) => {
         setNotification({ type, msg });
@@ -53,19 +56,24 @@ const App: React.FC = () => {
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            // OPTIMIZATION: Use createObjectURL for instant preview instead of FileReader
             const objectUrl = URL.createObjectURL(file);
             const img = new Image();
             
             img.onload = () => {
-                // Update state immediately with the Blob URL
                 setImage({ imgObject: img, width: img.width, height: img.height, src: objectUrl });
                 setResultBlobUrl(null);
                 setDecodedMessage('');
                 setHasSignature(false);
                 setRequiresPassword(false);
 
-                // Defer heavy scan to allow UI to paint the image first
+                // NEW: Calculate Capacity
+                // Formula: (Width * Height * 3 channels) - Header overhead (~272 bits) / 8 bits per byte
+                const totalPixels = img.width * img.height;
+                const availableBits = (totalPixels * 3) - 280; // 280 is safety buffer for header
+                const maxCharCapacity = Math.floor(availableBits / 8);
+                setMaxChars(maxCharCapacity > 0 ? maxCharCapacity : 0);
+
+                // Defer heavy scan
                 setTimeout(async () => {
                     try {
                         const canvas = document.createElement('canvas');
@@ -76,7 +84,6 @@ const App: React.FC = () => {
                             ctx.drawImage(img, 0, 0);
                             const imageData = ctx.getImageData(0, 0, img.width, img.height);
                             
-                            // Clone buffer for transfer
                             const bufferCopy = imageData.data.buffer.slice(0);
                             const sigType = await steganographyService.scanImage(bufferCopy);
                             
@@ -85,7 +92,6 @@ const App: React.FC = () => {
                                 setRequiresPassword(sigType === 'locked');
                                 notify('success', sigType === 'locked' ? 'Locked message detected!' : 'Open message detected!');
                             } else {
-                                // FIX 2: Provide feedback if no message is found when in Reveal mode
                                 if (mode === AppMode.SEE) {
                                     notify('error', 'No hidden message found in this image.');
                                 }
@@ -94,12 +100,12 @@ const App: React.FC = () => {
                     } catch (error) {
                         console.error("Scan error", error);
                     }
-                }, 100); // Slight delay to ensure render
+                }, 100);
             };
 
             img.onerror = () => {
                 notify('error', 'Failed to load image');
-                URL.revokeObjectURL(objectUrl); // Cleanup on error
+                URL.revokeObjectURL(objectUrl); 
             };
 
             img.src = objectUrl;
@@ -109,8 +115,13 @@ const App: React.FC = () => {
 
     const processEncode = () => {
         if (!image || !message) return notify('error', 'Please provide both an image and a message.');
-        setIsProcessing(true);
+        
+        // NEW: Pre-check capacity
+        if (message.length > maxChars) {
+            return notify('error', `Message is too long! Limit is ${formatBytes(maxChars)}`);
+        }
 
+        setIsProcessing(true);
         setTimeout(async () => {
             try {
                 const canvas = document.createElement('canvas');
@@ -165,7 +176,7 @@ const App: React.FC = () => {
                 setDecodedMessage(text);
                 notify('success', 'Message decrypted!');
             } catch (err: any) {
-                setDecodedMessage(''); // Clear message on error so box hides
+                setDecodedMessage(''); 
                 notify('error', err.message === 'Decryption failed' ? 'Wrong Password' : (err.message || 'Decoding failed'));
             } finally {
                 setIsProcessing(false);
@@ -181,6 +192,7 @@ const App: React.FC = () => {
         setPassword('');
         setHasSignature(false);
         setRequiresPassword(false);
+        setMaxChars(0); // Reset capacity
     };
 
     const toggleMode = (newMode: AppMode) => {
@@ -188,11 +200,14 @@ const App: React.FC = () => {
         reset();
     };
 
+    // NEW: Calculate usage percentage for UI bar
+    const usagePercent = maxChars > 0 ? Math.min((message.length / maxChars) * 100, 100) : 0;
+    const isOverLimit = message.length > maxChars;
+
     return (
         <div className="min-h-screen w-full flex flex-col items-center py-8 px-4">
             <Toast notification={notification} />
 
-            {/* Header */}
             <header className="w-full max-w-5xl flex justify-between items-center mb-10">
                 <div className="flex items-center gap-3">
                     <div className="bg-primary text-on-primary p-2.5 rounded-xl">
@@ -205,10 +220,8 @@ const App: React.FC = () => {
                 </button>
             </header>
 
-            {/* Main Card */}
             <main className="w-full max-w-5xl bg-surface-container border border-secondary-container rounded-[32px] overflow-hidden shadow-xl flex flex-col md:flex-row min-h-[550px]">
                 
-                {/* Left: Sidebar */}
                 <div className="md:w-1/3 bg-[#2b2930] p-8 flex flex-col border-b md:border-b-0 md:border-r border-secondary-container">
                     <div className="bg-surface-container p-1 rounded-full flex border border-secondary-container relative mb-8">
                         <div className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-secondary-container rounded-full transition-all duration-300 ease-out ${mode === AppMode.HIDE ? 'left-1' : 'translate-x-full left-1'}`}></div>
@@ -243,7 +256,6 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Right: Workspace */}
                 <div className="flex-1 p-8 flex flex-col relative">
                     
                     <ImagePreview 
@@ -253,21 +265,34 @@ const App: React.FC = () => {
                         onFileSelect={handleFileSelect} 
                     />
 
-                    {/* Controls */}
                     {image && (
                         <div className="flex-1 flex flex-col gap-5 animate-slide-up mt-8">
                             
                             {mode === AppMode.HIDE ? (
                                 <>
-                                    {/* Message FIRST in Conceal Mode */}
-                                    <textarea 
-                                        value={message}
-                                        onChange={(e) => setMessage(e.target.value)}
-                                        placeholder="Enter secret message here..."
-                                        className="flex-1 bg-surface border border-secondary-container text-white rounded-2xl p-4 resize-none focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary placeholder-outline min-h-[120px]"
-                                    ></textarea>
+                                    <div className="flex flex-col gap-2">
+                                        <textarea 
+                                            value={message}
+                                            onChange={(e) => setMessage(e.target.value)}
+                                            placeholder="Enter secret message here..."
+                                            className={`flex-1 bg-surface border text-white rounded-2xl p-4 resize-none focus:outline-none focus:ring-1 transition-colors placeholder-outline min-h-[120px]
+                                            ${isOverLimit ? 'border-error focus:border-error focus:ring-error' : 'border-secondary-container focus:border-primary focus:ring-primary'}`}
+                                        ></textarea>
+                                        
+                                        {/* NEW: Capacity Indicator Bar */}
+                                        <div className="flex items-center gap-3 px-1">
+                                            <div className="flex-1 h-1.5 bg-surface rounded-full overflow-hidden">
+                                                <div 
+                                                    className={`h-full transition-all duration-300 ${isOverLimit ? 'bg-error' : 'bg-primary'}`} 
+                                                    style={{ width: `${usagePercent}%` }}
+                                                ></div>
+                                            </div>
+                                            <span className={`text-xs font-mono ${isOverLimit ? 'text-error font-bold' : 'text-outline'}`}>
+                                                {message.length} / {maxChars} chars
+                                            </span>
+                                        </div>
+                                    </div>
 
-                                    {/* Password SECOND in Conceal Mode */}
                                     <div className="relative">
                                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                             <IconLock className="text-outline" />
@@ -292,16 +317,15 @@ const App: React.FC = () => {
                                             </a>
                                         </div>
                                     ) : (
-                                        <button onClick={processEncode} disabled={isProcessing || !message}
+                                        <button onClick={processEncode} disabled={isProcessing || !message || isOverLimit}
                                             className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2
-                                            ${!message ? 'bg-surface-container text-secondary-container border border-secondary-container cursor-not-allowed' : 'bg-primary hover:bg-white text-on-primary shadow-primary/10'}`}>
+                                            ${(!message || isOverLimit) ? 'bg-surface-container text-secondary-container border border-secondary-container cursor-not-allowed' : 'bg-primary hover:bg-white text-on-primary shadow-primary/10'}`}>
                                             {isProcessing ? <div className="w-6 h-6 border-4 border-on-primary/30 border-t-on-primary rounded-full animate-spin-slow"></div> : <><IconEyeOff className="w-5 h-5"/> Conceal</>}
                                         </button>
                                     )}
                                 </>
                             ) : (
                                 <>
-                                    {/* FIX 1: Password Input Only appears if specifically REQUIRED by the signature */}
                                     {requiresPassword && (
                                         <div className="relative animate-slide-up">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -317,7 +341,6 @@ const App: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {/* Decoded Message Box - HIDDEN BY DEFAULT */}
                                     {decodedMessage && (
                                         <div className="flex-1 bg-surface-container border border-primary/50 rounded-2xl p-6 flex items-center justify-center transition-colors min-h-[120px] animate-slide-up">
                                             <p className="w-full text-left text-primary font-mono text-sm break-words whitespace-pre-wrap">{decodedMessage}</p>
