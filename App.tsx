@@ -28,7 +28,7 @@ const App: React.FC = () => {
     const [hasSignature, setHasSignature] = useState(false);
     const [requiresPassword, setRequiresPassword] = useState(false);
     const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
-    const [maxChars, setMaxChars] = useState(0);
+    const [maxBytes, setMaxBytes] = useState(0);
 
     const notify = (type: 'success' | 'error', msg: string) => {
         setNotification({ type, msg });
@@ -51,6 +51,34 @@ const App: React.FC = () => {
         };
     }, [image]);
 
+    const scanImageForSignature = async (imgObject: HTMLImageElement) => {
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = imgObject.width;
+            canvas.height = imgObject.height;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            if (ctx) {
+                ctx.drawImage(imgObject, 0, 0);
+                const imageData = ctx.getImageData(0, 0, imgObject.width, imgObject.height);
+
+                const bufferCopy = imageData.data.buffer.slice(0);
+                const sigType = await steganographyService.scanImage(bufferCopy);
+
+                if (sigType) {
+                    setHasSignature(true);
+                    setRequiresPassword(sigType === 'locked');
+                    notify('success', sigType === 'locked' ? 'Locked message detected!' : 'Open message detected!');
+                } else {
+                    if (mode === AppMode.SEE) {
+                        notify('error', 'No hidden message found in this image.');
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Scan error", error);
+        }
+    };
+
     const processFile = (file: File) => {
         const objectUrl = URL.createObjectURL(file);
         const img = new Image();
@@ -67,37 +95,11 @@ const App: React.FC = () => {
 
             // Calculate Capacity
             const totalPixels = img.width * img.height;
-            const availableBits = (totalPixels * 3) - 280; 
-            const maxCharCapacity = Math.floor(availableBits / 8);
-            setMaxChars(maxCharCapacity > 0 ? maxCharCapacity : 0);
+            const availableBits = (totalPixels * 3) - 272;
+            const maxByteCapacity = Math.floor(availableBits / 8);
+            setMaxBytes(maxByteCapacity > 0 ? maxByteCapacity : 0);
 
-            setTimeout(async () => {
-                try {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                    if (ctx) {
-                        ctx.drawImage(img, 0, 0);
-                        const imageData = ctx.getImageData(0, 0, img.width, img.height);
-                        
-                        const bufferCopy = imageData.data.buffer.slice(0);
-                        const sigType = await steganographyService.scanImage(bufferCopy);
-                        
-                        if (sigType) {
-                            setHasSignature(true);
-                            setRequiresPassword(sigType === 'locked');
-                            notify('success', sigType === 'locked' ? 'Locked message detected!' : 'Open message detected!');
-                        } else {
-                            if (mode === AppMode.SEE) {
-                                notify('error', 'No hidden message found in this image.');
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.error("Scan error", error);
-                }
-            }, 100);
+            setTimeout(() => scanImageForSignature(img), 100);
         };
 
         img.onerror = () => {
@@ -116,7 +118,8 @@ const App: React.FC = () => {
 
     const processEncode = () => {
         if (!image || !message) return notify('error', 'Please provide both an image and a message.');
-        if (message.length > maxChars) return notify('error', `Message is too long! Limit is ${formatBytes(maxChars)}`);
+        const messageBytes = new TextEncoder().encode(message).length;
+        if (messageBytes > maxBytes) return notify('error', `Message is too long! Limit is ${formatBytes(maxBytes)}`);
 
         setIsProcessing(true);
         setTimeout(async () => {
@@ -140,9 +143,16 @@ const App: React.FC = () => {
                         const url = URL.createObjectURL(blob);
                         setResultBlobUrl(url);
                         setResultSize(blob.size);
+
+                        // Update Preview to the encoded image
+                        const newImg = new Image();
+                        newImg.onload = () => {
+                            setImage({ imgObject: newImg, width: newImg.width, height: newImg.height, src: url });
+                            scanImageForSignature(newImg);
+                        };
+                        newImg.src = url;
+
                         notify('success', 'Encryption complete!');
-                        // Note: We don't clear 'message' here so user can see what they encrypted,
-                        // but UI hides the 'Conceal' button to prevent double encoding.
                     } else {
                         notify('error', 'Failed to generate image');
                     }
@@ -191,7 +201,7 @@ const App: React.FC = () => {
         setPassword('');
         setHasSignature(false);
         setRequiresPassword(false);
-        setMaxChars(0);
+        setMaxBytes(0);
     };
 
     const toggleMode = (newMode: AppMode) => {
@@ -199,8 +209,9 @@ const App: React.FC = () => {
         reset();
     };
 
-    const usagePercent = maxChars > 0 ? Math.min((message.length / maxChars) * 100, 100) : 0;
-    const isOverLimit = message.length > maxChars;
+    const messageBytes = new TextEncoder().encode(message).length;
+    const usagePercent = maxBytes > 0 ? Math.min((messageBytes / maxBytes) * 100, 100) : 0;
+    const isOverLimit = messageBytes > maxBytes;
 
     return (
         <div className="min-h-screen w-full flex flex-col items-center py-8 px-4">
@@ -286,7 +297,7 @@ const App: React.FC = () => {
                                                 ></div>
                                             </div>
                                             <span className={`text-xs font-mono ${isOverLimit ? 'text-error font-bold' : 'text-outline'}`}>
-                                                {message.length} / {maxChars} chars
+                                                {messageBytes} / {maxBytes} bytes
                                             </span>
                                         </div>
                                     </div>
