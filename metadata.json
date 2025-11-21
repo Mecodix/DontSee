@@ -1,0 +1,5 @@
+{
+  "name": "DontSee",
+  "description": "A secure steganography application that encrypts messages using AES-GCM and conceals them within images using scattered LSB manipulation.",
+  "requestFramePermissions": []
+}

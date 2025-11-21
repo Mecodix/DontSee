@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DontSee | Secure Steganography</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              brand: ['Outfit', 'sans-serif'],
+            },
+            colors: {
+              surface: '#141218',
+              'surface-container': '#1d1b20',
+              primary: '#d0bcff',
+              'on-primary': '#381e72',
+              'secondary-container': '#4a4458',
+              outline: '#938f99',
+              error: '#f2b8b5',
+              'error-container': '#8c1d18',
+            },
+            animation: {
+              'slide-down': 'slideDown 0.4s cubic-bezier(0.2, 0, 0.2, 1) forwards',
+              'slide-up': 'slideUp 0.5s cubic-bezier(0.2, 0.0, 0.2, 1) forwards',
+              'blink-eye': 'blink 4s infinite',
+              'spin-slow': 'spin 1s linear infinite',
+            },
+            keyframes: {
+              slideDown: {
+                'from': { opacity: '0', transform: 'translate(-50%, -20px)' },
+                'to': { opacity: '1', transform: 'translate(-50%, 0)' },
+              },
+              slideUp: {
+                'from': { opacity: '0', transform: 'translateY(20px)' },
+                'to': { opacity: '1', transform: 'translateY(0)' },
+              },
+              blink: {
+                '0%, 48%, 52%, 100%': { transform: 'scaleY(1)' },
+                '50%': { transform: 'scaleY(0.1)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #141218;
+        color: #e6e1e5;
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* Custom scrollbar for aesthetics */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #141218; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #4a4458; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #d0bcff; 
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
