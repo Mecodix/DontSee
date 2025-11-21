@@ -2,36 +2,45 @@ import { WorkerRequest, WorkerResponse, SignatureType } from '../types';
 
 class SteganographyService {
     private worker: Worker | null = null;
+    private pendingRequests = new Map<string, { resolve: (res: WorkerResponse) => void, reject: (err: any) => void }>();
 
     constructor() {
         this.initWorker();
     }
 
     private initWorker() {
-        // ARCHITECTURE UPGRADE: Load Worker from file instead of string
         this.worker = new Worker(new URL('./processor.worker.ts', import.meta.url), { type: 'module' });
+        this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
+            const { id, ...response } = e.data;
+            const handler = this.pendingRequests.get(id);
+            if (handler) {
+                handler.resolve({ id, ...response });
+                this.pendingRequests.delete(id);
+            }
+        };
+        this.worker.onerror = (e) => {
+            console.error("Worker error:", e);
+        };
     }
 
     public terminate() {
         if (this.worker) {
             this.worker.terminate();
             this.worker = null;
+            this.pendingRequests.clear();
         }
     }
 
-    private sendRequest(message: WorkerRequest, transferrables: Transferable[]): Promise<WorkerResponse> {
+    private sendRequest(message: Omit<WorkerRequest, 'id'>, transferrables: Transferable[]): Promise<WorkerResponse> {
         if (!this.worker) this.initWorker();
         
         return new Promise((resolve, reject) => {
             if (!this.worker) return reject('Worker not initialized');
 
-            const handler = (e: MessageEvent) => {
-                this.worker?.removeEventListener('message', handler);
-                resolve(e.data);
-            };
+            const id = crypto.randomUUID();
+            this.pendingRequests.set(id, { resolve, reject });
 
-            this.worker.addEventListener('message', handler);
-            this.worker.postMessage(message, transferrables);
+            this.worker.postMessage({ ...message, id }, transferrables);
         });
     }
 

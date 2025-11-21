@@ -13,7 +13,7 @@ function mulberry32(a: number) {
 }
 
 self.onmessage = async (e: MessageEvent) => {
-    const { type, imageData, password, message } = e.data;
+    const { id, type, imageData, password, message } = e.data;
 
     try {
         if (type === 'encode') {
@@ -24,10 +24,9 @@ self.onmessage = async (e: MessageEvent) => {
             // 2. Crypto Setup
             const salt = crypto.getRandomValues(new Uint8Array(16));
             const iv = crypto.getRandomValues(new Uint8Array(12));
-            
+
             const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(password || ""), "PBKDF2", false, ["deriveKey"]);
-            
-            // SECURITY UPGRADE: Increased iterations from 100,000 to 600,000
+
             const key = await crypto.subtle.deriveKey(
                 { name: "PBKDF2", salt: salt, iterations: 600000, hash: "SHA-256" },
                 keyMaterial,
@@ -42,17 +41,17 @@ self.onmessage = async (e: MessageEvent) => {
 
             // 3. Header Construction (Sequential)
             let headerBits = "";
-            headerBits += signature; 
+            headerBits += signature;
             for(let b of salt) headerBits += b.toString(2).padStart(8, '0');
             for(let b of iv) headerBits += b.toString(2).padStart(8, '0');
-            
+
             const dataBitsLength = encryptedBytes.length * 8;
             headerBits += dataBitsLength.toString(2).padStart(32, '0');
 
             // 4. Capacity Check
             const pixels = new Uint8ClampedArray(imageData);
             const totalPixels = pixels.length / 4;
-            
+
             if ((headerBits.length + dataBitsLength) > totalPixels * 3) {
                     throw new Error("Message too long for this image size");
             }
@@ -60,29 +59,30 @@ self.onmessage = async (e: MessageEvent) => {
             // 5. Embed Header (Sequential)
             let ptr = 0;
             for (let i = 0; i < headerBits.length; i++) {
-                while ((ptr + 1) % 4 === 0) ptr++; 
+                while ((ptr + 1) % 4 === 0) ptr++;
                 if (headerBits[i] === '1') pixels[ptr] |= 1;
                 else pixels[ptr] &= ~1;
                 ptr++;
             }
-            
+
             const headerEndIndex = ptr;
 
             // 6. Embed Body (Scattered)
-            let seed = 0;
-            for(let b of salt) seed += b;
-            
+            const saltView = new DataView(salt.buffer);
+            // Use first 32 bits of salt as seed for higher entropy
+            let seed = saltView.getUint32(0, true);
+
             let availableCount = 0;
             for(let i = headerEndIndex; i < pixels.length; i++) {
                 if ((i + 1) % 4 !== 0) availableCount++;
             }
-            
+
             const availableChannels = new Uint32Array(availableCount);
             let acPtr = 0;
             for(let i = headerEndIndex; i < pixels.length; i++) {
                 if ((i + 1) % 4 !== 0) availableChannels[acPtr++] = i;
             }
-            
+
             const random = mulberry32(seed);
             const needed = dataBitsLength;
 
@@ -91,17 +91,17 @@ self.onmessage = async (e: MessageEvent) => {
                 const temp = availableChannels[i];
                 availableChannels[i] = availableChannels[j];
                 availableChannels[j] = temp;
-                
+
                 const byteIndex = Math.floor(i / 8);
                 const bitIndex = 7 - (i % 8);
                 const bit = (encryptedBytes[byteIndex] >>> bitIndex) & 1;
-                
+
                 const targetIdx = availableChannels[i];
                 if (bit === 1) pixels[targetIdx] |= 1;
                 else pixels[targetIdx] &= ~1;
             }
 
-            postMessage({ success: true, pixels: pixels.buffer }, { transfer: [pixels.buffer] });
+            postMessage({ id, success: true, pixels: pixels.buffer }, { transfer: [pixels.buffer] });
         }
 
         if (type === 'decode') {
@@ -134,14 +134,14 @@ self.onmessage = async (e: MessageEvent) => {
 
             const lenBits = readBits(32);
             const dataBitLength = parseInt(lenBits, 2);
-            
+
             if (dataBitLength <= 0 || dataBitLength > pixels.length * 3) throw new Error("Corrupt header data");
 
             // 2. Reconstruct Scatter Logic
             const headerEndIndex = ptr;
-            let seed = 0;
-            for(let b of salt) seed += b;
-            
+            const saltView = new DataView(salt.buffer);
+            let seed = saltView.getUint32(0, true);
+
             let availableCount = 0;
             for(let i = headerEndIndex; i < pixels.length; i++) {
                 if ((i + 1) % 4 !== 0) availableCount++;
@@ -152,20 +152,20 @@ self.onmessage = async (e: MessageEvent) => {
             for(let i = headerEndIndex; i < pixels.length; i++) {
                 if ((i + 1) % 4 !== 0) availableChannels[acPtr++] = i;
             }
-            
+
             const random = mulberry32(seed);
             const bodyBits = new Uint8Array(dataBitLength);
-            
+
             for (let i = 0; i < dataBitLength; i++) {
                 const j = i + Math.floor(random() * (availableChannels.length - i));
                 const temp = availableChannels[i];
                 availableChannels[i] = availableChannels[j];
                 availableChannels[j] = temp;
-                
+
                 const targetIdx = availableChannels[i];
                 bodyBits[i] = pixels[targetIdx] & 1;
             }
-            
+
             const encryptedBytes = new Uint8Array(dataBitLength / 8);
             for(let i=0; i<encryptedBytes.length; i++) {
                 let byteVal = 0;
@@ -178,8 +178,7 @@ self.onmessage = async (e: MessageEvent) => {
             // 3. Decrypt
             try {
                 const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(password || ""), "PBKDF2", false, ["deriveKey"]);
-                
-                // SECURITY UPGRADE: Match iterations
+
                 const key = await crypto.subtle.deriveKey(
                     { name: "PBKDF2", salt: salt, iterations: 600000, hash: "SHA-256" },
                     keyMaterial,
@@ -190,10 +189,10 @@ self.onmessage = async (e: MessageEvent) => {
 
                 const decryptedBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, encryptedBytes);
                 const text = new TextDecoder().decode(decryptedBuf);
-                
-                postMessage({ success: true, text });
+
+                postMessage({ id, success: true, text });
             } catch(e) {
-                postMessage({ success: false, error: "Decryption failed" });
+                postMessage({ id, success: false, error: "Decryption failed" });
             }
         }
 
@@ -206,15 +205,15 @@ self.onmessage = async (e: MessageEvent) => {
                 sig += (pixels[ptr] & 1).toString();
                 ptr++;
             }
-            
+
             let result = null;
             if (sig === SIG_LOCKED) result = 'locked';
             else if (sig === SIG_UNLOCKED) result = 'unlocked';
 
-            postMessage({ success: true, signature: result });
+            postMessage({ id, success: true, signature: result });
         }
 
     } catch (err: any) {
-        postMessage({ success: false, error: err.message });
+        postMessage({ id, success: false, error: err.message });
     }
 };

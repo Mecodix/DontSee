@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { steganographyService } from './services/steganographyService';
 import { AppMode, AppImage, NotificationState } from './types';
-import { IconBlinkingEye, IconDownload, IconEyeOff, IconHeart, IconLock, IconUnlock, IconZap, IconChevronDown } from './components/Icons';
+import { IconBlinkingEye, IconDownload, IconEyeOff, IconHeart, IconLock, IconZap, IconChevronDown } from './components/Icons';
 import { Toast } from './components/Toast';
 import { ImagePreview } from './components/ImagePreview';
 
@@ -30,6 +30,9 @@ const App: React.FC = () => {
     const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
     const [maxChars, setMaxChars] = useState(0);
 
+    // Fix UI Race Condition: Track the ID of the currently loaded image source
+    const currentImageRef = useRef<string | null>(null);
+
     const notify = (type: 'success' | 'error', msg: string) => {
         setNotification({ type, msg });
         setTimeout(() => setNotification(null), 4000);
@@ -51,15 +54,22 @@ const App: React.FC = () => {
         };
     }, [image]);
 
-    // UX UPGRADE: Unified file processor for Click and Drag-Drop
     const processFile = (file: File) => {
         const objectUrl = URL.createObjectURL(file);
         const img = new Image();
         
+        // Set the tracking ID immediately
+        currentImageRef.current = objectUrl;
+
         img.onload = () => {
+            // If the loaded image doesn't match the latest request, ignore it
+            if (currentImageRef.current !== objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+                return;
+            }
+
             setImage({ imgObject: img, width: img.width, height: img.height, src: objectUrl });
             
-            // LOGIC FIX: Reset previous results to prevent double-encoding
             setResultBlobUrl(null);
             setDecodedMessage('');
             setHasSignature(false);
@@ -75,6 +85,9 @@ const App: React.FC = () => {
 
             setTimeout(async () => {
                 try {
+                    // Check again before starting expensive op
+                    if (currentImageRef.current !== objectUrl) return;
+
                     const canvas = document.createElement('canvas');
                     canvas.width = img.width;
                     canvas.height = img.height;
@@ -86,13 +99,16 @@ const App: React.FC = () => {
                         const bufferCopy = imageData.data.buffer.slice(0);
                         const sigType = await steganographyService.scanImage(bufferCopy);
                         
-                        if (sigType) {
-                            setHasSignature(true);
-                            setRequiresPassword(sigType === 'locked');
-                            notify('success', sigType === 'locked' ? 'Locked message detected!' : 'Open message detected!');
-                        } else {
-                            if (mode === AppMode.SEE) {
-                                notify('error', 'No hidden message found in this image.');
+                        // Final check: ensure we are still looking at the same image
+                        if (currentImageRef.current === objectUrl) {
+                            if (sigType) {
+                                setHasSignature(true);
+                                setRequiresPassword(sigType === 'locked');
+                                notify('success', sigType === 'locked' ? 'Locked message detected!' : 'Open message detected!');
+                            } else {
+                                if (mode === AppMode.SEE) {
+                                    notify('error', 'No hidden message found in this image.');
+                                }
                             }
                         }
                     }
@@ -116,9 +132,12 @@ const App: React.FC = () => {
         e.target.value = '';
     };
 
+    const messageBytes = new TextEncoder().encode(message).length;
+    const isOverLimit = messageBytes > maxChars;
+
     const processEncode = () => {
         if (!image || !message) return notify('error', 'Please provide both an image and a message.');
-        if (message.length > maxChars) return notify('error', `Message is too long! Limit is ${formatBytes(maxChars)}`);
+        if (isOverLimit) return notify('error', `Message is too long! Limit is ${formatBytes(maxChars)}`);
 
         setIsProcessing(true);
         setTimeout(async () => {
@@ -194,6 +213,7 @@ const App: React.FC = () => {
         setHasSignature(false);
         setRequiresPassword(false);
         setMaxChars(0);
+        currentImageRef.current = null;
     };
 
     const toggleMode = (newMode: AppMode) => {
@@ -201,8 +221,7 @@ const App: React.FC = () => {
         reset();
     };
 
-    const usagePercent = maxChars > 0 ? Math.min((message.length / maxChars) * 100, 100) : 0;
-    const isOverLimit = message.length > maxChars;
+    const usagePercent = maxChars > 0 ? Math.min((messageBytes / maxChars) * 100, 100) : 0;
 
     return (
         <div className="min-h-screen w-full flex flex-col items-center py-8 px-4">
@@ -288,7 +307,7 @@ const App: React.FC = () => {
                                                 ></div>
                                             </div>
                                             <span className={`text-xs font-mono ${isOverLimit ? 'text-error font-bold' : 'text-outline'}`}>
-                                                {message.length} / {maxChars} chars
+                                                {messageBytes} / {maxChars} bytes
                                             </span>
                                         </div>
                                     </div>
@@ -298,7 +317,7 @@ const App: React.FC = () => {
                                             <IconLock className="text-outline" />
                                         </div>
                                         <input 
-                                            type="text" 
+                                            type="password"
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
                                             placeholder="Set Password (Optional)"
@@ -332,7 +351,7 @@ const App: React.FC = () => {
                                                 <IconLock className="text-outline" />
                                             </div>
                                             <input 
-                                                type="text" 
+                                                type="password"
                                                 value={password}
                                                 onChange={(e) => setPassword(e.target.value)}
                                                 placeholder="Enter Password to Unlock"

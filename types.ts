@@ -20,6 +20,7 @@ export interface NotificationState {
 export type WorkerRequestType = 'encode' | 'decode' | 'scan';
 
 export interface WorkerRequest {
+    id: string;
     type: WorkerRequestType;
     imageData: ArrayBuffer; // Transferable
     password?: string;
@@ -29,6 +30,7 @@ export interface WorkerRequest {
 export type SignatureType = 'locked' | 'unlocked' | null;
 
 export interface WorkerResponse {
+    id: string;
     success: boolean;
     pixels?: ArrayBuffer;
     text?: string;
