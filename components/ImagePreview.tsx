@@ -7,7 +7,6 @@ interface ImagePreviewProps {
     hasSignature: boolean;
     onReset: () => void;
     onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    // UX UPGRADE: New handler for dropping files
     onFileDrop: (file: File) => void;
 }
 
@@ -16,21 +15,23 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
 
     const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
         e.preventDefault();
+        e.stopPropagation();
         setIsDragging(true);
     };
 
     const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
         e.preventDefault();
+        e.stopPropagation();
         setIsDragging(false);
     };
 
     const handleDrop = (e: DragEvent<HTMLDivElement>) => {
         e.preventDefault();
+        e.stopPropagation();
         setIsDragging(false);
         
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             const file = e.dataTransfer.files[0];
-            // Simple check for image type
             if (file.type.startsWith('image/')) {
                 onFileDrop(file);
             }
@@ -64,14 +65,16 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
                     )}
                 </div>
             ) : (
-                <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer pointer-events-none">
+                // FIX: Removed 'pointer-events-none' so clicks/taps register on the label
+                <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer">
                     <div className={`bg-secondary-container p-6 rounded-full mb-6 text-white transition-transform shadow-xl shadow-black/30 ${isDragging ? 'scale-125' : 'group-hover:scale-110'}`}>
                         <IconUpload className="w-10 h-10" />
                     </div>
-                    <span className="text-white font-bold text-lg">{isDragging ? 'Drop it here!' : 'Click or Drag to Upload'}</span>
+                    <span className="text-white font-bold text-lg">{isDragging ? 'Drop it here!' : 'Tap or Drag to Upload'}</span>
                     <span className="text-outline text-sm mt-2">PNG or JPG</span>
-                    {/* Enable pointer events for input specifically */}
-                    <input type="file" accept="image/*" onChange={onFileSelect} className="hidden pointer-events-auto" />
+                    
+                    {/* Input remains hidden, but because Label is clickable, this works now */}
+                    <input type="file" accept="image/*" onChange={onFileSelect} className="hidden" />
                 </label>
             )}
         </div>
