@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { steganographyService } from './services/steganographyService';
 import { AppMode, AppImage, NotificationState } from './types';
 import { IconBlinkingEye, IconDownload, IconEyeOff, IconHeart, IconLock, IconUnlock, IconZap, IconChevronDown } from './components/Icons';
@@ -28,8 +28,6 @@ const App: React.FC = () => {
     const [hasSignature, setHasSignature] = useState(false);
     const [requiresPassword, setRequiresPassword] = useState(false);
     const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
-    
-    // NEW: State for capacity tracking
     const [maxChars, setMaxChars] = useState(0);
 
     const notify = (type: 'success' | 'error', msg: string) => {
@@ -53,73 +51,74 @@ const App: React.FC = () => {
         };
     }, [image]);
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const objectUrl = URL.createObjectURL(file);
-            const img = new Image();
+    // UX UPGRADE: Unified file processor for Click and Drag-Drop
+    const processFile = (file: File) => {
+        const objectUrl = URL.createObjectURL(file);
+        const img = new Image();
+        
+        img.onload = () => {
+            setImage({ imgObject: img, width: img.width, height: img.height, src: objectUrl });
             
-            img.onload = () => {
-                setImage({ imgObject: img, width: img.width, height: img.height, src: objectUrl });
-                setResultBlobUrl(null);
-                setDecodedMessage('');
-                setHasSignature(false);
-                setRequiresPassword(false);
+            // LOGIC FIX: Reset previous results to prevent double-encoding
+            setResultBlobUrl(null);
+            setDecodedMessage('');
+            setHasSignature(false);
+            setRequiresPassword(false);
+            setMessage('');
+            setPassword('');
 
-                // NEW: Calculate Capacity
-                // Formula: (Width * Height * 3 channels) - Header overhead (~272 bits) / 8 bits per byte
-                const totalPixels = img.width * img.height;
-                const availableBits = (totalPixels * 3) - 280; // 280 is safety buffer for header
-                const maxCharCapacity = Math.floor(availableBits / 8);
-                setMaxChars(maxCharCapacity > 0 ? maxCharCapacity : 0);
+            // Calculate Capacity
+            const totalPixels = img.width * img.height;
+            const availableBits = (totalPixels * 3) - 280; 
+            const maxCharCapacity = Math.floor(availableBits / 8);
+            setMaxChars(maxCharCapacity > 0 ? maxCharCapacity : 0);
 
-                // Defer heavy scan
-                setTimeout(async () => {
-                    try {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = img.width;
-                        canvas.height = img.height;
-                        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                        if (ctx) {
-                            ctx.drawImage(img, 0, 0);
-                            const imageData = ctx.getImageData(0, 0, img.width, img.height);
-                            
-                            const bufferCopy = imageData.data.buffer.slice(0);
-                            const sigType = await steganographyService.scanImage(bufferCopy);
-                            
-                            if (sigType) {
-                                setHasSignature(true);
-                                setRequiresPassword(sigType === 'locked');
-                                notify('success', sigType === 'locked' ? 'Locked message detected!' : 'Open message detected!');
-                            } else {
-                                if (mode === AppMode.SEE) {
-                                    notify('error', 'No hidden message found in this image.');
-                                }
+            setTimeout(async () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    if (ctx) {
+                        ctx.drawImage(img, 0, 0);
+                        const imageData = ctx.getImageData(0, 0, img.width, img.height);
+                        
+                        const bufferCopy = imageData.data.buffer.slice(0);
+                        const sigType = await steganographyService.scanImage(bufferCopy);
+                        
+                        if (sigType) {
+                            setHasSignature(true);
+                            setRequiresPassword(sigType === 'locked');
+                            notify('success', sigType === 'locked' ? 'Locked message detected!' : 'Open message detected!');
+                        } else {
+                            if (mode === AppMode.SEE) {
+                                notify('error', 'No hidden message found in this image.');
                             }
                         }
-                    } catch (error) {
-                        console.error("Scan error", error);
                     }
-                }, 100);
-            };
+                } catch (error) {
+                    console.error("Scan error", error);
+                }
+            }, 100);
+        };
 
-            img.onerror = () => {
-                notify('error', 'Failed to load image');
-                URL.revokeObjectURL(objectUrl); 
-            };
+        img.onerror = () => {
+            notify('error', 'Failed to load image');
+            URL.revokeObjectURL(objectUrl); 
+        };
 
-            img.src = objectUrl;
-        }
+        img.src = objectUrl;
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) processFile(file);
         e.target.value = '';
     };
 
     const processEncode = () => {
         if (!image || !message) return notify('error', 'Please provide both an image and a message.');
-        
-        // NEW: Pre-check capacity
-        if (message.length > maxChars) {
-            return notify('error', `Message is too long! Limit is ${formatBytes(maxChars)}`);
-        }
+        if (message.length > maxChars) return notify('error', `Message is too long! Limit is ${formatBytes(maxChars)}`);
 
         setIsProcessing(true);
         setTimeout(async () => {
@@ -144,6 +143,8 @@ const App: React.FC = () => {
                         setResultBlobUrl(url);
                         setResultSize(blob.size);
                         notify('success', 'Encryption complete!');
+                        // Note: We don't clear 'message' here so user can see what they encrypted,
+                        // but UI hides the 'Conceal' button to prevent double encoding.
                     } else {
                         notify('error', 'Failed to generate image');
                     }
@@ -192,7 +193,7 @@ const App: React.FC = () => {
         setPassword('');
         setHasSignature(false);
         setRequiresPassword(false);
-        setMaxChars(0); // Reset capacity
+        setMaxChars(0);
     };
 
     const toggleMode = (newMode: AppMode) => {
@@ -200,7 +201,6 @@ const App: React.FC = () => {
         reset();
     };
 
-    // NEW: Calculate usage percentage for UI bar
     const usagePercent = maxChars > 0 ? Math.min((message.length / maxChars) * 100, 100) : 0;
     const isOverLimit = message.length > maxChars;
 
@@ -263,6 +263,7 @@ const App: React.FC = () => {
                         hasSignature={hasSignature} 
                         onReset={reset} 
                         onFileSelect={handleFileSelect} 
+                        onFileDrop={processFile}
                     />
 
                     {image && (
@@ -279,7 +280,6 @@ const App: React.FC = () => {
                                             ${isOverLimit ? 'border-error focus:border-error focus:ring-error' : 'border-secondary-container focus:border-primary focus:ring-primary'}`}
                                         ></textarea>
                                         
-                                        {/* NEW: Capacity Indicator Bar */}
                                         <div className="flex items-center gap-3 px-1">
                                             <div className="flex-1 h-1.5 bg-surface rounded-full overflow-hidden">
                                                 <div 

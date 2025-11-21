@@ -1,5 +1,3 @@
-
-import { workerScript } from './workerScript';
 import { WorkerRequest, WorkerResponse, SignatureType } from '../types';
 
 class SteganographyService {
@@ -10,8 +8,8 @@ class SteganographyService {
     }
 
     private initWorker() {
-        const blob = new Blob([workerScript], { type: 'application/javascript' });
-        this.worker = new Worker(URL.createObjectURL(blob));
+        // ARCHITECTURE UPGRADE: Load Worker from file instead of string
+        this.worker = new Worker(new URL('./processor.worker.ts', import.meta.url), { type: 'module' });
     }
 
     public terminate() {

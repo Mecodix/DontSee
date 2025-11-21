@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, DragEvent } from 'react';
 import { IconUpload, IconX, IconCheck } from './Icons';
 import { AppImage } from '../types';
 
@@ -7,18 +7,49 @@ interface ImagePreviewProps {
     hasSignature: boolean;
     onReset: () => void;
     onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    // UX UPGRADE: New handler for dropping files
+    onFileDrop: (file: File) => void;
 }
 
-export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature, onReset, onFileSelect }) => {
+export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature, onReset, onFileSelect, onFileDrop }) => {
+    const [isDragging, setIsDragging] = useState(false);
+
+    const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragging(false);
+        
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const file = e.dataTransfer.files[0];
+            // Simple check for image type
+            if (file.type.startsWith('image/')) {
+                onFileDrop(file);
+            }
+        }
+    };
+
     return (
-        <div className={`relative rounded-3xl overflow-hidden border-2 transition-all duration-300 w-full
+        <div 
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`relative rounded-3xl overflow-hidden border-2 transition-all duration-300 w-full
             ${image 
-                ? 'border-secondary-container bg-surface'  // Fixed: Solid border instead of transparent, removed mb-6 to stop jumping
-                : 'border-dashed border-secondary-container hover:border-primary hover:bg-secondary-container/20 min-h-[400px] cursor-pointer group'}`}>
+                ? 'border-secondary-container bg-surface' 
+                : `min-h-[400px] cursor-pointer group ${isDragging ? 'border-primary bg-primary/10' : 'border-dashed border-secondary-container hover:border-primary hover:bg-secondary-container/20'}`
+            }`}>
             
             {image ? (
                 <div className="w-full relative flex justify-center bg-black/50">
-                    {/* Added min-h here to ensure consistent feel even with small images */}
                     <img src={image.src} className="w-full h-auto max-h-[500px] min-h-[300px] object-contain" alt="Preview" />
                     
                     <button onClick={onReset} 
@@ -33,13 +64,14 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
                     )}
                 </div>
             ) : (
-                <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer">
-                    <div className="bg-secondary-container p-6 rounded-full mb-6 text-white group-hover:scale-110 transition-transform shadow-xl shadow-black/30">
+                <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer pointer-events-none">
+                    <div className={`bg-secondary-container p-6 rounded-full mb-6 text-white transition-transform shadow-xl shadow-black/30 ${isDragging ? 'scale-125' : 'group-hover:scale-110'}`}>
                         <IconUpload className="w-10 h-10" />
                     </div>
-                    <span className="text-white font-bold text-lg">Click to upload Image</span>
+                    <span className="text-white font-bold text-lg">{isDragging ? 'Drop it here!' : 'Click or Drag to Upload'}</span>
                     <span className="text-outline text-sm mt-2">PNG or JPG</span>
-                    <input type="file" accept="image/*" onChange={onFileSelect} className="hidden" />
+                    {/* Enable pointer events for input specifically */}
+                    <input type="file" accept="image/*" onChange={onFileSelect} className="hidden pointer-events-auto" />
                 </label>
             )}
         </div>
