@@ -4,6 +4,7 @@ import { AppMode, AppImage, NotificationState } from './types';
 import { IconBlinkingEye, IconDownload, IconEyeOff, IconHeart, IconLock, IconZap, IconChevronDown } from './components/Icons';
 import { Toast } from './components/Toast';
 import { ImagePreview } from './components/ImagePreview';
+import { calculateMaxBytes, getByteLength } from './utils/capacity';
 
 // Helper to format bytes
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -28,7 +29,7 @@ const App: React.FC = () => {
     const [hasSignature, setHasSignature] = useState(false);
     const [requiresPassword, setRequiresPassword] = useState(false);
     const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
-    const [maxChars, setMaxChars] = useState(0);
+    const [maxBytes, setMaxBytes] = useState(0);
 
     const notify = (type: 'success' | 'error', msg: string) => {
         setNotification({ type, msg });
@@ -66,10 +67,8 @@ const App: React.FC = () => {
             setPassword('');
 
             // Calculate Capacity
-            const totalPixels = img.width * img.height;
-            const availableBits = (totalPixels * 3) - 280; 
-            const maxCharCapacity = Math.floor(availableBits / 8);
-            setMaxChars(maxCharCapacity > 0 ? maxCharCapacity : 0);
+            const capacity = calculateMaxBytes(img.width, img.height);
+            setMaxBytes(capacity);
 
             setTimeout(async () => {
                 try {
@@ -116,7 +115,8 @@ const App: React.FC = () => {
 
     const processEncode = () => {
         if (!image || !message) return notify('error', 'Please provide both an image and a message.');
-        if (message.length > maxChars) return notify('error', `Message is too long! Limit is ${formatBytes(maxChars)}`);
+        const currentBytes = getByteLength(message);
+        if (currentBytes > maxBytes) return notify('error', `Message is too long! Limit is ${formatBytes(maxBytes)}`);
 
         setIsProcessing(true);
         setTimeout(async () => {
@@ -191,7 +191,7 @@ const App: React.FC = () => {
         setPassword('');
         setHasSignature(false);
         setRequiresPassword(false);
-        setMaxChars(0);
+        setMaxBytes(0);
     };
 
     const toggleMode = (newMode: AppMode) => {
@@ -199,8 +199,9 @@ const App: React.FC = () => {
         reset();
     };
 
-    const usagePercent = maxChars > 0 ? Math.min((message.length / maxChars) * 100, 100) : 0;
-    const isOverLimit = message.length > maxChars;
+    const currentBytes = getByteLength(message);
+    const usagePercent = maxBytes > 0 ? Math.min((currentBytes / maxBytes) * 100, 100) : 0;
+    const isOverLimit = currentBytes > maxBytes;
 
     return (
         <div className="min-h-screen w-full flex flex-col items-center py-8 px-4">
@@ -286,7 +287,7 @@ const App: React.FC = () => {
                                                 ></div>
                                             </div>
                                             <span className={`text-xs font-mono ${isOverLimit ? 'text-error font-bold' : 'text-outline'}`}>
-                                                {message.length} / {maxChars} chars
+                                                {currentBytes} / {maxBytes} bytes
                                             </span>
                                         </div>
                                     </div>
