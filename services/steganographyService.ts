@@ -8,7 +8,6 @@ class SteganographyService {
     }
 
     private initWorker() {
-        // ARCHITECTURE UPGRADE: Load Worker from file instead of string
         this.worker = new Worker(new URL('./processor.worker.ts', import.meta.url), { type: 'module' });
     }
 

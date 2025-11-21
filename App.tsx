@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { steganographyService } from './services/steganographyService';
 import { AppMode, AppImage, NotificationState } from './types';
-import { IconBlinkingEye, IconDownload, IconEyeOff, IconHeart, IconLock, IconUnlock, IconZap, IconChevronDown } from './components/Icons';
+import { IconBlinkingEye, IconDownload, IconEyeOff, IconHeart, IconLock, IconZap, IconChevronDown } from './components/Icons';
 import { Toast } from './components/Toast';
 import { ImagePreview } from './components/ImagePreview';
 
@@ -51,7 +51,6 @@ const App: React.FC = () => {
         };
     }, [image]);
 
-    // UX UPGRADE: Unified file processor for Click and Drag-Drop
     const processFile = (file: File) => {
         const objectUrl = URL.createObjectURL(file);
         const img = new Image();
@@ -59,7 +58,6 @@ const App: React.FC = () => {
         img.onload = () => {
             setImage({ imgObject: img, width: img.width, height: img.height, src: objectUrl });
             
-            // LOGIC FIX: Reset previous results to prevent double-encoding
             setResultBlobUrl(null);
             setDecodedMessage('');
             setHasSignature(false);
@@ -298,7 +296,7 @@ const App: React.FC = () => {
                                             <IconLock className="text-outline" />
                                         </div>
                                         <input 
-                                            type="text" 
+                                            type="password"
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
                                             placeholder="Set Password (Optional)"
@@ -332,7 +330,7 @@ const App: React.FC = () => {
                                                 <IconLock className="text-outline" />
                                             </div>
                                             <input 
-                                                type="text" 
+                                                type="password"
                                                 value={password}
                                                 onChange={(e) => setPassword(e.target.value)}
                                                 placeholder="Enter Password to Unlock"
