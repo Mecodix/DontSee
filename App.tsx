@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { steganographyService } from './services/steganographyService';
 import { AppMode, AppImage, NotificationState } from './types';
@@ -85,6 +84,11 @@ const App: React.FC = () => {
                                 setHasSignature(true);
                                 setRequiresPassword(sigType === 'locked');
                                 notify('success', sigType === 'locked' ? 'Locked message detected!' : 'Open message detected!');
+                            } else {
+                                // FIX 2: Provide feedback if no message is found when in Reveal mode
+                                if (mode === AppMode.SEE) {
+                                    notify('error', 'No hidden message found in this image.');
+                                }
                             }
                         }
                     } catch (error) {
@@ -297,8 +301,8 @@ const App: React.FC = () => {
                                 </>
                             ) : (
                                 <>
-                                    {/* Password Input (Only if Locked) */}
-                                    {(requiresPassword || !hasSignature) && (
+                                    {/* FIX 1: Password Input Only appears if specifically REQUIRED by the signature */}
+                                    {requiresPassword && (
                                         <div className="relative animate-slide-up">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                                 <IconLock className="text-outline" />
