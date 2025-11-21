@@ -11,20 +11,23 @@ interface ImagePreviewProps {
 
 export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature, onReset, onFileSelect }) => {
     return (
-        <div className={`relative rounded-3xl overflow-hidden border-2 transition-all duration-500
-            ${image ? 'border-transparent bg-black mb-6' : 'border-dashed border-secondary-container hover:border-primary hover:bg-secondary-container/20 h-full min-h-[400px] cursor-pointer group'}`}>
+        <div className={`relative rounded-3xl overflow-hidden border-2 transition-all duration-300 w-full
+            ${image 
+                ? 'border-secondary-container bg-surface'  // Fixed: Solid border instead of transparent, removed mb-6 to stop jumping
+                : 'border-dashed border-secondary-container hover:border-primary hover:bg-secondary-container/20 min-h-[400px] cursor-pointer group'}`}>
             
             {image ? (
-                <div className="w-full relative flex justify-center bg-black/50 rounded-3xl">
-                    <img src={image.src} className="w-full h-auto max-h-[500px] object-contain" alt="Preview" />
+                <div className="w-full relative flex justify-center bg-black/50">
+                    {/* Added min-h here to ensure consistent feel even with small images */}
+                    <img src={image.src} className="w-full h-auto max-h-[500px] min-h-[300px] object-contain" alt="Preview" />
                     
                     <button onClick={onReset} 
-                        className="absolute top-3 right-3 bg-surface-container/80 p-2 rounded-full text-white hover:text-error backdrop-blur-sm border border-secondary-container">
+                        className="absolute top-3 right-3 bg-surface-container/80 p-2 rounded-full text-white hover:text-error backdrop-blur-sm border border-secondary-container transition-transform hover:scale-110">
                         <IconX className="w-5 h-5" />
                     </button>
                     
                     {hasSignature && (
-                        <div className="absolute bottom-3 left-3 bg-on-primary border border-primary text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 animate-slide-up shadow-lg">
+                        <div className="absolute bottom-3 left-3 bg-on-primary border border-primary text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 animate-slide-up shadow-lg z-10">
                             <IconCheck className="w-3 h-3" /> Signature Detected
                         </div>
                     )}
