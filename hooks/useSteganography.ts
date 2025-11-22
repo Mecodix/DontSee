@@ -26,7 +26,7 @@ export const useSteganography = () => {
 
     const notify = (type: 'success' | 'error', msg: string) => {
         setNotification({ type, msg });
-        setTimeout(() => setNotification(null), 3000); // Reduced to 3s (will reduce more in Toast)
+        setTimeout(() => setNotification(null), 2000); // Reduced to 2s
     };
 
     // Cleanup Result URL
@@ -92,14 +92,6 @@ export const useSteganography = () => {
                             setHasSignature(true);
                             setRequiresPassword(sigType === 'locked');
                             // User Request: Remove notifications for detection
-                            // notify('success', sigType === 'locked' ? 'Locked message detected!' : 'Open message detected!');
-                        } else {
-                            // Only notify if explicitly looking for secrets (Mode SEE),
-                            // but since we auto-switch, we might suppress this too.
-                            // If user explicitly switched to Reveal, they might want to know.
-                            // But here we are just scanning on load.
-                            // If mode was already SEE (from previous image?), and we load a new one without signature...
-                            // Let's suppress this error during scan to be cleaner.
                         }
                     }
                 } catch (error) {
@@ -108,7 +100,7 @@ export const useSteganography = () => {
                 } finally {
                     resolve();
                 }
-            }, 50); // Reduced timeout
+            }, 50);
         });
         setIsScanning(false);
     };
@@ -139,7 +131,7 @@ export const useSteganography = () => {
                 const url = URL.createObjectURL(resultBlob);
                 setResultBlobUrl(url);
                 setResultSize(resultBlob.size);
-                notify('success', 'Encryption complete!');
+                // User Request: Remove "Encryption complete!" notification
 
                 setIsProcessing(false);
                 setProgress(0);
@@ -172,7 +164,7 @@ export const useSteganography = () => {
                 );
 
                 setDecodedMessage(text);
-                notify('success', 'Message decrypted!');
+                // User Request: Remove "Message decrypted!" notification
             } catch (err: any) {
                 setDecodedMessage('');
                 notify('error', err.message === 'Decryption failed' ? 'Wrong Password' : (err.message || 'Decoding failed'));
