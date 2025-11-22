@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AppImage } from '../types';
+import { validateImageFile } from '../utils/validation';
 
 export const useImageHandler = () => {
     const [image, setImage] = useState<AppImage | null>(null);
@@ -13,7 +14,15 @@ export const useImageHandler = () => {
         };
     }, [image]);
 
-    const processFile = (file: File, onLoadSuccess?: (img: HTMLImageElement) => void, onError?: () => void) => {
+    const processFile = async (file: File, onLoadSuccess?: (img: HTMLImageElement) => void, onError?: (msg?: string) => void) => {
+        // 1. Magic Byte Validation
+        const isValid = await validateImageFile(file);
+        if (!isValid) {
+            if (onError) onError("Invalid file format. Please upload a valid PNG or JPG.");
+            return;
+        }
+
+        // 2. Load Image
         const objectUrl = URL.createObjectURL(file);
         const img = new Image();
 
@@ -30,7 +39,7 @@ export const useImageHandler = () => {
         };
 
         img.onerror = () => {
-            if (onError) onError();
+            if (onError) onError("Failed to load image data.");
             URL.revokeObjectURL(objectUrl);
         };
 

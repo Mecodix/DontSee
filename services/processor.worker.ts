@@ -113,8 +113,17 @@ self.onmessage = async (e: MessageEvent) => {
             }
 
             const needed = dataBitsLength;
+            const batchSize = 10000; // Process in chunks to report progress
 
             for (let i = 0; i < needed; i++) {
+                // Report progress every batch
+                if (i % batchSize === 0) {
+                    const progress = Math.floor((i / needed) * 100);
+                    postMessage({ success: true, progress });
+                    // Allow main thread to breathe/update UI
+                    await new Promise(r => setTimeout(r, 0));
+                }
+
                 // LCG Step: Generate logical index in body space
                 const logicalBodyIndex = (start + i * step) % bodyValidCount;
 
@@ -133,6 +142,8 @@ self.onmessage = async (e: MessageEvent) => {
                 else pixels[targetIdx] &= ~1;
             }
 
+            // Final progress
+            postMessage({ success: true, progress: 100 });
             postMessage({ success: true, pixels: pixels.buffer }, { transfer: [pixels.buffer] });
         }
 
@@ -192,14 +203,23 @@ self.onmessage = async (e: MessageEvent) => {
             }
 
             const bodyBits = new Uint8Array(dataBitLength);
+            const batchSize = 10000;
 
             for (let i = 0; i < dataBitLength; i++) {
+                if (i % batchSize === 0) {
+                    const progress = Math.floor((i / dataBitLength) * 100);
+                    postMessage({ success: true, progress });
+                    await new Promise(r => setTimeout(r, 0));
+                }
+
                 const logicalBodyIndex = (start + i * step) % bodyValidCount;
                 const absoluteLogicalIndex = headerValidCount + logicalBodyIndex;
                 const targetIdx = getPhysicalIndex(absoluteLogicalIndex);
 
                 bodyBits[i] = pixels[targetIdx] & 1;
             }
+
+            postMessage({ success: true, progress: 100 });
 
             const encryptedBytes = new Uint8Array(dataBitLength / 8);
             for(let i=0; i<encryptedBytes.length; i++) {

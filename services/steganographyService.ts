@@ -18,15 +18,30 @@ class SteganographyService {
         }
     }
 
-    private sendRequest(message: WorkerRequest, transferrables: Transferable[]): Promise<WorkerResponse> {
+    // Updated to support multiple progress messages before the final result
+    private sendRequest(
+        message: WorkerRequest,
+        transferrables: Transferable[],
+        onProgress?: (p: number) => void
+    ): Promise<WorkerResponse> {
         if (!this.worker) this.initWorker();
         
         return new Promise((resolve, reject) => {
             if (!this.worker) return reject('Worker not initialized');
 
             const handler = (e: MessageEvent) => {
+                const data = e.data as WorkerResponse;
+
+                // Handle Progress
+                if (data.progress !== undefined) {
+                    if (onProgress) onProgress(data.progress);
+                    // Do not resolve/remove listener yet, waiting for final result
+                    return;
+                }
+
+                // Handle Final Result or Error
                 this.worker?.removeEventListener('message', handler);
-                resolve(e.data);
+                resolve(data);
             };
 
             this.worker.addEventListener('message', handler);
@@ -35,17 +50,23 @@ class SteganographyService {
     }
 
     public async scanImage(imageData: ArrayBuffer): Promise<SignatureType> {
+        // Scan is fast, no progress needed
         const result = await this.sendRequest({ type: 'scan', imageData }, [imageData]);
         return result.signature || null;
     }
 
-    public async encode(imageData: ArrayBuffer, message: string, password?: string): Promise<ArrayBuffer> {
+    public async encode(
+        imageData: ArrayBuffer,
+        message: string,
+        password?: string,
+        onProgress?: (p: number) => void
+    ): Promise<ArrayBuffer> {
         const result = await this.sendRequest({ 
             type: 'encode', 
             imageData, 
             message, 
             password: password || '' 
-        }, [imageData]);
+        }, [imageData], onProgress);
 
         if (result.success && result.pixels) {
             return result.pixels;
@@ -53,12 +74,16 @@ class SteganographyService {
         throw new Error(result.error || 'Encoding failed');
     }
 
-    public async decode(imageData: ArrayBuffer, password?: string): Promise<string> {
+    public async decode(
+        imageData: ArrayBuffer,
+        password?: string,
+        onProgress?: (p: number) => void
+    ): Promise<string> {
         const result = await this.sendRequest({ 
             type: 'decode', 
             imageData, 
             password: password || '' 
-        }, [imageData]);
+        }, [imageData], onProgress);
 
         if (result.success && result.text !== undefined) {
             return result.text;

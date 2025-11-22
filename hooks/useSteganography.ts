@@ -8,6 +8,7 @@ export const useSteganography = () => {
     const [message, setMessage] = useState('');
     const [decodedMessage, setDecodedMessage] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [progress, setProgress] = useState(0);
     const [notification, setNotification] = useState<NotificationState | null>(null);
     const [resultBlobUrl, setResultBlobUrl] = useState<string | null>(null);
     const [resultSize, setResultSize] = useState(0);
@@ -49,6 +50,7 @@ export const useSteganography = () => {
         setMessage('');
         setPassword('');
         setMaxBytes(0);
+        setProgress(0);
     };
 
     const handleImageScan = (img: HTMLImageElement, mode: AppMode) => {
@@ -97,6 +99,8 @@ export const useSteganography = () => {
         if (currentBytes > maxBytes) return notify('error', `Message is too long! Limit is ${maxBytes} bytes`);
 
         setIsProcessing(true);
+        setProgress(0);
+
         setTimeout(async () => {
             try {
                 const canvas = document.createElement('canvas');
@@ -108,7 +112,12 @@ export const useSteganography = () => {
                 ctx.drawImage(image.imgObject, 0, 0);
                 const imgData = ctx.getImageData(0, 0, image.width, image.height);
 
-                const newPixelBuffer = await steganographyService.encode(imgData.data.buffer, message, password);
+                const newPixelBuffer = await steganographyService.encode(
+                    imgData.data.buffer,
+                    message,
+                    password,
+                    (p) => setProgress(p)
+                );
 
                 const newImgData = new ImageData(new Uint8ClampedArray(newPixelBuffer), image.width, image.height);
                 ctx.putImageData(newImgData, 0, 0);
@@ -123,17 +132,20 @@ export const useSteganography = () => {
                         notify('error', 'Failed to generate image');
                     }
                     setIsProcessing(false);
+                    setProgress(0);
                 }, 'image/png');
 
             } catch (err: any) {
                 notify('error', err.message || 'Encoding failed');
                 setIsProcessing(false);
+                setProgress(0);
             }
         }, 50);
     };
 
     const processDecode = (image: AppImage) => {
         setIsProcessing(true);
+        setProgress(0);
 
         setTimeout(async () => {
             try {
@@ -146,7 +158,11 @@ export const useSteganography = () => {
                 ctx.drawImage(image.imgObject, 0, 0);
                 const imgData = ctx.getImageData(0, 0, image.width, image.height);
 
-                const text = await steganographyService.decode(imgData.data.buffer, password);
+                const text = await steganographyService.decode(
+                    imgData.data.buffer,
+                    password,
+                    (p) => setProgress(p)
+                );
                 setDecodedMessage(text);
                 notify('success', 'Message decrypted!');
             } catch (err: any) {
@@ -154,6 +170,7 @@ export const useSteganography = () => {
                 notify('error', err.message === 'Decryption failed' ? 'Wrong Password' : (err.message || 'Decoding failed'));
             } finally {
                 setIsProcessing(false);
+                setProgress(0);
             }
         }, 50);
     };
@@ -163,6 +180,7 @@ export const useSteganography = () => {
         message, setMessage,
         decodedMessage, setDecodedMessage,
         isProcessing,
+        progress, // New state
         notification,
         resultBlobUrl,
         resultSize,
@@ -173,6 +191,6 @@ export const useSteganography = () => {
         processDecode,
         handleImageScan,
         resetStegoState,
-        notify // Export notify for generic errors if needed
+        notify
     };
 };
