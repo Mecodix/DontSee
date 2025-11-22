@@ -124,13 +124,16 @@ export const useSteganography = () => {
                     imgData.data.buffer,
                     message,
                     password,
-                    (p) => setProgress(p)
+                    (p) => setProgress(old => Math.max(old, p)) // Safety: Ensure progress only increases
                 );
 
                 setStage('rendering'); // Step 3: Creating Blob
 
                 const newImgData = new ImageData(new Uint8ClampedArray(newPixelBuffer), image.width, image.height);
                 ctx.putImageData(newImgData, 0, 0);
+
+                // Artificial delay to let user see 'Finalizing' if fast
+                await new Promise(r => setTimeout(r, 100));
 
                 canvas.toBlob((blob) => {
                     if (blob) {
@@ -176,8 +179,12 @@ export const useSteganography = () => {
                 const text = await steganographyService.decode(
                     imgData.data.buffer,
                     password,
-                    (p) => setProgress(p)
+                    (p) => setProgress(old => Math.max(old, p)) // Safety
                 );
+
+                // Artificial delay to smooth out transition
+                await new Promise(r => setTimeout(r, 100));
+
                 setDecodedMessage(text);
                 notify('success', 'Message decrypted!');
             } catch (err: any) {

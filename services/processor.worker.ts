@@ -114,17 +114,21 @@ self.onmessage = async (e: MessageEvent) => {
 
             const needed = dataBitsLength;
 
-            // OPTIMIZATION: Dynamic batch size to prevent message flooding
-            // Target ~50 updates total
-            const batchSize = Math.max(10000, Math.ceil(needed / 50));
+            // BEST PRACTICE: Time-based throttling
+            // Aim for ~30fps updates (33ms) to balance smoothness and performance
+            let lastReportTime = performance.now();
 
             for (let i = 0; i < needed; i++) {
-                // Report progress every batch
-                if (i % batchSize === 0) {
-                    const progress = Math.floor((i / needed) * 100);
-                    postMessage({ success: true, progress });
-                    // Yield to event loop only when sending message
-                    await new Promise(r => setTimeout(r, 0));
+                // Check time every 1000 iterations to avoid overhead of performance.now()
+                if (i % 1000 === 0) {
+                    const now = performance.now();
+                    if (now - lastReportTime > 33) {
+                        const progress = Math.floor((i / needed) * 100);
+                        postMessage({ success: true, progress });
+                        // Yield to event loop
+                        await new Promise(r => setTimeout(r, 0));
+                        lastReportTime = performance.now();
+                    }
                 }
 
                 // LCG Step: Generate logical index in body space
@@ -207,14 +211,18 @@ self.onmessage = async (e: MessageEvent) => {
 
             const bodyBits = new Uint8Array(dataBitLength);
 
-            // OPTIMIZATION: Dynamic batch size
-            const batchSize = Math.max(10000, Math.ceil(dataBitLength / 50));
+            // BEST PRACTICE: Time-based throttling
+            let lastReportTime = performance.now();
 
             for (let i = 0; i < dataBitLength; i++) {
-                if (i % batchSize === 0) {
-                    const progress = Math.floor((i / dataBitLength) * 100);
-                    postMessage({ success: true, progress });
-                    await new Promise(r => setTimeout(r, 0));
+                if (i % 1000 === 0) {
+                    const now = performance.now();
+                    if (now - lastReportTime > 33) {
+                        const progress = Math.floor((i / dataBitLength) * 100);
+                        postMessage({ success: true, progress });
+                        await new Promise(r => setTimeout(r, 0));
+                        lastReportTime = performance.now();
+                    }
                 }
 
                 const logicalBodyIndex = (start + i * step) % bodyValidCount;
