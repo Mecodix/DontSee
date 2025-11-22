@@ -228,9 +228,6 @@ const App: React.FC = () => {
                     </div>
                     <h1 className="text-3xl font-bold font-brand text-white">Dont<span className="text-primary">See</span></h1>
                 </div>
-                <button onClick={reset} className="text-white/70 hover:text-white hover:bg-surface-container px-4 py-2 rounded-full text-sm font-medium transition-colors">
-                    Reset
-                </button>
             </header>
 
             <main className="w-full max-w-5xl bg-surface-container border border-secondary-container rounded-[32px] overflow-hidden shadow-xl flex flex-col md:flex-row min-h-[550px]">
@@ -331,14 +328,16 @@ const App: React.FC = () => {
                                     
                                     {resultBlobUrl ? (
                                         <div className="animate-slide-up bg-[#2b2930] border border-secondary-container p-4 rounded-2xl flex items-center justify-between">
-                                            <div className="flex flex-col justify-center">
-                                                <p className="text-white font-bold text-sm mb-0.5">Ready</p>
+                                            <div className="flex flex-col justify-center max-w-[70%]">
+                                                <p className="text-white font-bold text-sm mb-0.5 truncate" title={image ? `${image.name.split('.').slice(0, -1).join('.')}_secure.png` : 'dontsee_secure.png'}>
+                                                    {image ? `${image.name.split('.').slice(0, -1).join('.')}_secure.png` : 'dontsee_secure.png'}
+                                                </p>
                                                 <p className="text-outline text-xs font-mono">{formatBytes(resultSize)}</p>
                                             </div>
                                             <a
                                                 href={resultBlobUrl}
                                                 download={image ? `${image.name.split('.').slice(0, -1).join('.')}_secure.png` : 'dontsee_secure.png'}
-                                                className="w-12 h-12 bg-primary hover:bg-white text-on-primary rounded-full flex items-center justify-center transition-transform active:scale-95 shadow-lg"
+                                                className="w-12 h-12 bg-primary hover:bg-white text-on-primary rounded-full flex items-center justify-center transition-transform active:scale-95 shadow-lg flex-shrink-0"
                                                 aria-label="Download encoded image"
                                             >
                                                 <IconDownload className="w-6 h-6" />
