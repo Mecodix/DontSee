@@ -54,7 +54,9 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
             className={`relative rounded-3xl overflow-hidden border-2 transition-all duration-300 w-full
             ${image 
                 ? 'border-secondary-container bg-surface' 
-                : `min-h-[400px] cursor-pointer group ${isDragging ? 'border-primary bg-primary/10' : 'border-dashed border-secondary-container hover:border-primary hover:bg-secondary-container/20'}`
+                : `min-h-[400px] cursor-pointer group ${isDragging
+                    ? 'border-primary bg-primary/10'
+                    : 'border-dashed border-secondary-container hover:border-primary hover:bg-secondary-container/20 focus-within:border-primary focus-within:bg-secondary-container/20'}`
             }`}>
             
             {image ? (
@@ -83,7 +85,7 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
                     tabIndex={0}
                     onKeyDown={handleKeyDown}
                     onClick={() => fileInputRef.current?.click()}
-                    className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset rounded-3xl"
+                    className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer focus:outline-none rounded-3xl"
                     aria-label="Upload an image"
                 >
                     <div className={`bg-secondary-container p-6 rounded-full mb-6 text-white transition-transform shadow-xl shadow-black/30 ${isDragging ? 'scale-125' : 'group-hover:scale-110'}`}>
