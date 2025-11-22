@@ -51,28 +51,16 @@ async function decompress(data: Uint8Array): Promise<string> {
 
 // Crypto Helper (Argon2id)
 async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
-    const derivedBits = await argon2id({
-        password: password,
-        salt: salt, // Expects Uint8Array
-        parallelism: 1,
-        iterations: 16, // Tuned for acceptable web performance vs security
-        memorySize: 16384, // 16MB
-        hashLength: 32, // 256 bits
-        outputType: 'encoded' // library returns hex or encoded string, we need raw bytes logic below
-    });
-
-    // Note: hash-wasm returns a hex string or encoded string based on config.
-    // We actually want raw bytes for importKey.
-    // Let's use the outputType: 'binary' (Uint8Array) if supported, or parse.
-    // Actually, looking at hash-wasm docs, it supports returning Uint8Array directly.
+    // PERFORMANCE FIX: Only call argon2id ONCE.
+    // hash-wasm's argon2id returns a Uint8Array if outputType is 'binary'.
 
     const rawKey = await argon2id({
         password: password,
         salt: salt,
         parallelism: 1,
-        iterations: 16,
-        memorySize: 16384,
-        hashLength: 32,
+        iterations: 16, // Security/Performance tradeoff for web
+        memorySize: 16384, // 16MB
+        hashLength: 32, // 256-bit key
         outputType: 'binary'
     });
 
@@ -116,9 +104,7 @@ self.onmessage = async (e: MessageEvent) => {
             const salt = crypto.getRandomValues(new Uint8Array(16));
             const iv = crypto.getRandomValues(new Uint8Array(12));
 
-            // Derive Key using Argon2id if password present, else standard logic
-            // (Though if no password, we might skip encryption, but existing logic encrypts with empty password?
-            // Yes, original logic encrypted with empty string password. We maintain that for consistency.)
+            // Derive Key using Argon2id
             const key = await deriveKey(password || "", salt);
 
             // Compress before encrypting
