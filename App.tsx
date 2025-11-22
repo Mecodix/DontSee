@@ -23,6 +23,8 @@ const App: React.FC = () => {
     const [mode, setMode] = useState<AppMode>(AppMode.HIDE);
     // Local scanning state to prevent flickering on upload
     const [isScanning, setIsScanning] = useState(false);
+    // New state for browser decoding phase
+    const [isReading, setIsReading] = useState(false);
 
     const { image, processFile, resetImage } = useImageHandler();
 
@@ -52,11 +54,13 @@ const App: React.FC = () => {
         resetStegoState();
         setMode(AppMode.HIDE); // Reset to default mode
         setIsScanning(false);
+        setIsReading(false);
     };
 
     // Handle Auto-Switch Logic based on Scan
     const onImageLoaded = async (img: HTMLImageElement) => {
-        setIsScanning(true);
+        setIsReading(false); // Image is fully loaded in DOM
+        setIsScanning(true); // Start analyzing signature
         try {
             await handleImageScan(img, mode);
         } finally {
@@ -77,14 +81,16 @@ const App: React.FC = () => {
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            // Immediate feedback: Set reading to true
+            setIsReading(true);
             resetStegoState();
-            setIsScanning(true);
+
             processFile(
                 file,
                 (img) => onImageLoaded(img),
                 (msg) => {
                     notify('error', msg || 'Failed to load image');
-                    setIsScanning(false);
+                    setIsReading(false);
                 }
             );
         }
@@ -92,14 +98,16 @@ const App: React.FC = () => {
     };
 
     const handleFileDrop = (file: File) => {
+        // Immediate feedback: Set reading to true
+        setIsReading(true);
         resetStegoState();
-        setIsScanning(true);
+
         processFile(
             file,
             (img) => onImageLoaded(img),
             (msg) => {
                 notify('error', msg || 'Failed to load image');
-                setIsScanning(false);
+                setIsReading(false);
             }
         );
     };
@@ -126,21 +134,24 @@ const App: React.FC = () => {
         return `${progress}%`;
     };
 
-    // Dynamic Header Text
-    const headerTitle = !image
-        ? "Hide or Reveal Secrets"
-        : (isScanning ? "Analyzing Image..." : (mode === AppMode.HIDE ? "Conceal Text" : "Reveal Secret"));
+    // Dynamic Header Text - Prioritize Scanning/Reading State
+    const headerTitle = isReading
+        ? "Reading Image..."
+        : (isScanning
+            ? "Analyzing Image..."
+            : (!image ? "Hide or Reveal Secrets" : (mode === AppMode.HIDE ? "Conceal Text" : "Reveal Secret")));
 
-    // Updated Description Logic to prioritize Steganography and fix inconsistencies
-    const headerDesc = !image
-        ? "Upload a DontSee image to decrypt, or any image to hide a new message."
+    const headerDesc = isReading
+        ? "Decoding image data..."
         : (isScanning
             ? "Please wait while we check for hidden messages..."
-            : (mode === AppMode.HIDE
+            : (!image
+                ? "Upload a DontSee image to decrypt, or any image to hide a new message."
+                : (mode === AppMode.HIDE
                 ? "Hide text inside images using steganography. Optionally add a password for AES-GCM encryption."
                 : (requiresPassword
                     ? "Locked message detected. Enter password to reconstruct the scattered data."
-                    : "Hidden message found. Click Reveal to read the secret.")));
+                    : "Hidden message found. Click Reveal to read the secret."))));
 
     return (
         <div className="min-h-screen w-full flex flex-col items-center py-8 px-4">
@@ -178,19 +189,22 @@ const App: React.FC = () => {
                         onReset={reset} 
                         onFileSelect={handleFileSelect} 
                         onFileDrop={handleFileDrop}
+                        isLoading={isReading || isScanning}
                     />
 
-                    {image && (
+                    {(image || isScanning || isReading) && (
                         <div className="flex-1 flex flex-col gap-5 animate-slide-up mt-8">
                             
-                            {isScanning ? (
+                            {(isScanning || isReading) ? (
                                 <div className="flex-1 flex items-center justify-center h-full min-h-[200px]">
                                     <div className="flex flex-col items-center gap-3">
                                         <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
-                                        <p className="text-outline text-sm font-mono">Scanning for signature...</p>
+                                        <p className="text-outline text-sm font-mono">
+                                            {isReading ? "Decoding image data..." : "Scanning for signature..."}
+                                        </p>
                                     </div>
                                 </div>
-                            ) : (
+                            ) : (image && (
                                 mode === AppMode.HIDE ? (
                                     <ConcealView
                                         image={image}
@@ -224,7 +238,7 @@ const App: React.FC = () => {
                                         onReConceal={handleReConceal}
                                         getButtonLabel={getButtonLabel}
                                     />
-                                )
+                                ))
                             )}
                         </div>
                     )}

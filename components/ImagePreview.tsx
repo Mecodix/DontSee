@@ -6,12 +6,13 @@ interface ImagePreviewProps {
     image: AppImage | null;
     hasSignature: boolean;
     requiresPassword?: boolean;
+    isLoading?: boolean;
     onReset: () => void;
     onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onFileDrop: (file: File) => void;
 }
 
-export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature, requiresPassword, onReset, onFileSelect, onFileDrop }) => {
+export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature, requiresPassword, isLoading, onReset, onFileSelect, onFileDrop }) => {
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -66,11 +67,19 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
                     : 'border-dashed border-secondary-container hover:border-primary hover:bg-secondary-container/20 focus-within:border-primary focus-within:bg-secondary-container/20'}`
             }`}>
             
+            {isLoading && !image && (
+                 <div className="absolute inset-0 z-20 bg-surface/80 backdrop-blur-sm flex flex-col items-center justify-center">
+                     <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
+                     <span className="text-white font-bold animate-pulse">Reading Image...</span>
+                 </div>
+            )}
+
             {image ? (
                 <div className="w-full relative flex justify-center bg-black/50">
                     <img src={image.src} className="w-full h-auto max-h-[500px] min-h-[300px] object-contain" alt="Preview" />
                     
                     <button onClick={onReset} 
+                        disabled={isLoading}
                         aria-label="Remove image"
                         className="absolute top-3 right-3 bg-surface-container/80 p-2 rounded-full text-white hover:text-error backdrop-blur-sm border border-secondary-container transition-transform hover:scale-110">
                         <IconX className="w-5 h-5" />
