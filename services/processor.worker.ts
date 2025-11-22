@@ -1,6 +1,15 @@
+import { argon2id } from 'hash-wasm';
+
 // Constants
 const SIG_UNLOCKED = "0100010001010011"; // "DS"
 const SIG_LOCKED = "0100010001001100";   // "DL"
+
+// Internal Constant for "Empty Password"
+// This is used because hash-wasm requires a non-empty string/buffer.
+// We use a unique string that is unlikely to be chosen by a user.
+// Note: This means if a user literally types this string, it's equivalent to empty.
+// But for a steganography app, this is an acceptable trade-off for "Optional" password support.
+const EMPTY_PASSWORD_SENTINEL = "___DONTSEE_EMPTY_PASSWORD_SENTINEL_V1___";
 
 // PRNG (Mulberry32)
 function mulberry32(a: number) {
@@ -47,8 +56,31 @@ async function decompress(data: Uint8Array): Promise<string> {
     return await new Response(stream).text();
 }
 
+// Crypto Helper (Argon2id)
+async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
+    // hash-wasm requires non-empty password.
+    const effectivePassword = (!password || password.length === 0) ? EMPTY_PASSWORD_SENTINEL : password;
+
+    const rawKey = await argon2id({
+        password: effectivePassword,
+        salt: salt,
+        parallelism: 1,
+        iterations: 16, // Security/Performance tradeoff for web
+        memorySize: 16384, // 16MB
+        hashLength: 32, // 256-bit key
+        outputType: 'binary'
+    });
+
+    return await crypto.subtle.importKey(
+        "raw",
+        rawKey,
+        "AES-GCM",
+        false,
+        ["encrypt", "decrypt"]
+    );
+}
+
 self.onmessage = async (e: MessageEvent) => {
-    // NEW: Accept imageBitmap (transferable) or imageData (fallback/legacy)
     const { type, imageData, imageBitmap, password, message } = e.data;
 
     try {
@@ -79,15 +111,8 @@ self.onmessage = async (e: MessageEvent) => {
             const salt = crypto.getRandomValues(new Uint8Array(16));
             const iv = crypto.getRandomValues(new Uint8Array(12));
 
-            const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(password || ""), "PBKDF2", false, ["deriveKey"]);
-
-            const key = await crypto.subtle.deriveKey(
-                { name: "PBKDF2", salt: salt, iterations: 600000, hash: "SHA-256" },
-                keyMaterial,
-                { name: "AES-GCM", length: 256 },
-                false,
-                ["encrypt"]
-            );
+            // Derive Key using Argon2id
+            const key = await deriveKey(password || "", salt);
 
             // Compress before encrypting
             const compressedMsg = await compress(message);
@@ -262,15 +287,7 @@ self.onmessage = async (e: MessageEvent) => {
 
             // Decrypt
             try {
-                const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(password || ""), "PBKDF2", false, ["deriveKey"]);
-
-                const key = await crypto.subtle.deriveKey(
-                    { name: "PBKDF2", salt: salt, iterations: 600000, hash: "SHA-256" },
-                    keyMaterial,
-                    { name: "AES-GCM", length: 256 },
-                    false,
-                    ["decrypt"]
-                );
+                const key = await deriveKey(password || "", salt);
 
                 const decryptedBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, encryptedBytes);
 
