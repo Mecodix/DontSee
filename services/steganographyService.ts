@@ -18,7 +18,6 @@ class SteganographyService {
         }
     }
 
-    // Updated to support multiple progress messages before the final result
     private sendRequest(
         message: WorkerRequest,
         transferrables: Transferable[],
@@ -32,14 +31,11 @@ class SteganographyService {
             const handler = (e: MessageEvent) => {
                 const data = e.data as WorkerResponse;
 
-                // Handle Progress
                 if (data.progress !== undefined) {
                     if (onProgress) onProgress(data.progress);
-                    // Do not resolve/remove listener yet, waiting for final result
                     return;
                 }
 
-                // Handle Final Result or Error
                 this.worker?.removeEventListener('message', handler);
                 resolve(data);
             };
@@ -50,40 +46,40 @@ class SteganographyService {
     }
 
     public async scanImage(imageData: ArrayBuffer): Promise<SignatureType> {
-        // Scan is fast, no progress needed
         const result = await this.sendRequest({ type: 'scan', imageData }, [imageData]);
         return result.signature || null;
     }
 
+    // Updated to support ImageBitmap input and Blob output
     public async encode(
-        imageData: ArrayBuffer,
+        imageBitmap: ImageBitmap,
         message: string,
         password?: string,
         onProgress?: (p: number) => void
-    ): Promise<ArrayBuffer> {
+    ): Promise<Blob> {
         const result = await this.sendRequest({ 
             type: 'encode', 
-            imageData, 
+            imageBitmap,
             message, 
             password: password || '' 
-        }, [imageData], onProgress);
+        }, [imageBitmap], onProgress);
 
-        if (result.success && result.pixels) {
-            return result.pixels;
+        if (result.success && result.blob) {
+            return result.blob;
         }
         throw new Error(result.error || 'Encoding failed');
     }
 
     public async decode(
-        imageData: ArrayBuffer,
+        imageBitmap: ImageBitmap,
         password?: string,
         onProgress?: (p: number) => void
     ): Promise<string> {
         const result = await this.sendRequest({ 
             type: 'decode', 
-            imageData, 
+            imageBitmap,
             password: password || '' 
-        }, [imageData], onProgress);
+        }, [imageBitmap], onProgress);
 
         if (result.success && result.text !== undefined) {
             return result.text;
