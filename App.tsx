@@ -166,9 +166,9 @@ const App: React.FC = () => {
                 </div>
             </header>
 
-            <main className="w-full max-w-5xl bg-surface-container border border-secondary-container rounded-[32px] overflow-hidden shadow-xl flex flex-col md:flex-row min-h-[550px]">
+            <main className="w-full max-w-5xl bg-surface-container border border-secondary-container rounded-[32px] overflow-hidden shadow-xl flex flex-col md:flex-row">
                 
-                <div className="md:w-1/3 bg-[#2b2930] p-8 flex flex-col border-b md:border-b-0 md:border-r border-secondary-container justify-center">
+                <div className="md:w-1/3 bg-[#2b2930] p-8 flex flex-col border-b md:border-b-0 md:border-r border-secondary-container justify-center min-h-[200px]">
                     {/* Unified Header: No Tabs */}
                     <div className="flex flex-col gap-4">
                         <h2 className="text-3xl font-bold text-white font-brand transition-all duration-300 animate-slide-up" key={headerTitle}>
