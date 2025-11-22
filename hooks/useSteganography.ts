@@ -3,12 +3,17 @@ import { steganographyService } from '../services/steganographyService';
 import { calculateMaxBytes, getByteLength } from '../utils/capacity';
 import { NotificationState, AppImage, AppMode } from '../types';
 
+export type ProcessingStage = 'idle' | 'analyzing' | 'processing' | 'rendering';
+
 export const useSteganography = () => {
     const [password, setPassword] = useState('');
     const [message, setMessage] = useState('');
     const [decodedMessage, setDecodedMessage] = useState('');
+
     const [isProcessing, setIsProcessing] = useState(false);
     const [progress, setProgress] = useState(0);
+    const [stage, setStage] = useState<ProcessingStage>('idle');
+
     const [notification, setNotification] = useState<NotificationState | null>(null);
     const [resultBlobUrl, setResultBlobUrl] = useState<string | null>(null);
     const [resultSize, setResultSize] = useState(0);
@@ -51,10 +56,10 @@ export const useSteganography = () => {
         setPassword('');
         setMaxBytes(0);
         setProgress(0);
+        setStage('idle');
     };
 
     const handleImageScan = (img: HTMLImageElement, mode: AppMode) => {
-        // Calculate Capacity
         try {
             const capacity = calculateMaxBytes(img.width, img.height);
             setMaxBytes(capacity);
@@ -100,6 +105,7 @@ export const useSteganography = () => {
 
         setIsProcessing(true);
         setProgress(0);
+        setStage('analyzing'); // Step 1: Reading Image Data
 
         setTimeout(async () => {
             try {
@@ -112,12 +118,16 @@ export const useSteganography = () => {
                 ctx.drawImage(image.imgObject, 0, 0);
                 const imgData = ctx.getImageData(0, 0, image.width, image.height);
 
+                setStage('processing'); // Step 2: Worker Processing
+
                 const newPixelBuffer = await steganographyService.encode(
                     imgData.data.buffer,
                     message,
                     password,
                     (p) => setProgress(p)
                 );
+
+                setStage('rendering'); // Step 3: Creating Blob
 
                 const newImgData = new ImageData(new Uint8ClampedArray(newPixelBuffer), image.width, image.height);
                 ctx.putImageData(newImgData, 0, 0);
@@ -133,12 +143,14 @@ export const useSteganography = () => {
                     }
                     setIsProcessing(false);
                     setProgress(0);
+                    setStage('idle');
                 }, 'image/png');
 
             } catch (err: any) {
                 notify('error', err.message || 'Encoding failed');
                 setIsProcessing(false);
                 setProgress(0);
+                setStage('idle');
             }
         }, 50);
     };
@@ -146,6 +158,7 @@ export const useSteganography = () => {
     const processDecode = (image: AppImage) => {
         setIsProcessing(true);
         setProgress(0);
+        setStage('analyzing');
 
         setTimeout(async () => {
             try {
@@ -157,6 +170,8 @@ export const useSteganography = () => {
 
                 ctx.drawImage(image.imgObject, 0, 0);
                 const imgData = ctx.getImageData(0, 0, image.width, image.height);
+
+                setStage('processing');
 
                 const text = await steganographyService.decode(
                     imgData.data.buffer,
@@ -171,6 +186,7 @@ export const useSteganography = () => {
             } finally {
                 setIsProcessing(false);
                 setProgress(0);
+                setStage('idle');
             }
         }, 50);
     };
@@ -180,7 +196,8 @@ export const useSteganography = () => {
         message, setMessage,
         decodedMessage, setDecodedMessage,
         isProcessing,
-        progress, // New state
+        progress,
+        stage, // New state
         notification,
         resultBlobUrl,
         resultSize,

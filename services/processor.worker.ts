@@ -113,14 +113,17 @@ self.onmessage = async (e: MessageEvent) => {
             }
 
             const needed = dataBitsLength;
-            const batchSize = 10000; // Process in chunks to report progress
+
+            // OPTIMIZATION: Dynamic batch size to prevent message flooding
+            // Target ~50 updates total
+            const batchSize = Math.max(10000, Math.ceil(needed / 50));
 
             for (let i = 0; i < needed; i++) {
                 // Report progress every batch
                 if (i % batchSize === 0) {
                     const progress = Math.floor((i / needed) * 100);
                     postMessage({ success: true, progress });
-                    // Allow main thread to breathe/update UI
+                    // Yield to event loop only when sending message
                     await new Promise(r => setTimeout(r, 0));
                 }
 
@@ -203,7 +206,9 @@ self.onmessage = async (e: MessageEvent) => {
             }
 
             const bodyBits = new Uint8Array(dataBitLength);
-            const batchSize = 10000;
+
+            // OPTIMIZATION: Dynamic batch size
+            const batchSize = Math.max(10000, Math.ceil(dataBitLength / 50));
 
             for (let i = 0; i < dataBitLength; i++) {
                 if (i % batchSize === 0) {

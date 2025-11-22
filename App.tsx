@@ -29,6 +29,7 @@ const App: React.FC = () => {
         decodedMessage, setDecodedMessage,
         isProcessing,
         progress,
+        stage,
         notification,
         resultBlobUrl,
         resultSize,
@@ -78,6 +79,14 @@ const App: React.FC = () => {
     const currentBytes = getByteLength(message);
     const usagePercent = maxBytes > 0 ? Math.min((currentBytes / maxBytes) * 100, 100) : 0;
     const isOverLimit = currentBytes > maxBytes;
+
+    // Helper to determine button label
+    const getButtonLabel = () => {
+        if (!isProcessing) return null;
+        if (stage === 'analyzing') return 'Preparing...';
+        if (stage === 'rendering') return 'Finalizing...';
+        return `${progress}%`; // Stage is 'processing'
+    };
 
     return (
         <div className="min-h-screen w-full flex flex-col items-center py-8 px-4">
@@ -214,15 +223,19 @@ const App: React.FC = () => {
                                             {isProcessing ? (
                                                 <div className="flex items-center gap-2 z-10 relative">
                                                     <div className="w-5 h-5 border-4 border-on-primary/30 border-t-on-primary rounded-full animate-spin-slow" aria-label="Processing"></div>
-                                                    <span>{progress}%</span>
+                                                    <span>{getButtonLabel()}</span>
                                                 </div>
                                             ) : (
                                                 <><IconEyeOff className="w-5 h-5"/> Conceal</>
                                             )}
 
                                             {/* Progress Bar Background */}
-                                            {isProcessing && (
+                                            {isProcessing && stage === 'processing' && (
                                                 <div className="absolute inset-0 bg-white/20 z-0 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }}></div>
+                                            )}
+                                            {/* Indeterminate Bar for Preparing/Finalizing */}
+                                            {isProcessing && stage !== 'processing' && (
+                                                <div className="absolute inset-0 bg-white/10 z-0 animate-pulse"></div>
                                             )}
                                         </button>
                                     )}
@@ -257,14 +270,17 @@ const App: React.FC = () => {
                                         {isProcessing ? (
                                             <div className="flex items-center gap-2 z-10 relative">
                                                 <div className="w-5 h-5 border-4 border-white/30 border-t-white rounded-full animate-spin-slow"></div>
-                                                <span>{progress}%</span>
+                                                <span>{getButtonLabel()}</span>
                                             </div>
                                         ) : (
                                             <><IconZap className="w-5 h-5"/> Reveal</>
                                         )}
 
-                                        {isProcessing && (
+                                        {isProcessing && stage === 'processing' && (
                                             <div className="absolute inset-0 bg-white/10 z-0 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }}></div>
+                                        )}
+                                        {isProcessing && stage !== 'processing' && (
+                                            <div className="absolute inset-0 bg-white/5 z-0 animate-pulse"></div>
                                         )}
                                     </button>
                                 </>
