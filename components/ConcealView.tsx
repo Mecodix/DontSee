@@ -78,7 +78,7 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
             </div>
 
             {resultBlobUrl ? (
-                <div className="animate-slide-up bg-[#2b2930] border border-secondary-container p-4 rounded-2xl flex items-center justify-between">
+                <div className="animate-slide-up bg-surface-raised border border-secondary-container p-4 rounded-2xl flex items-center justify-between">
                     <div className="flex flex-col justify-center max-w-[70%]">
                         <p className="text-white font-bold text-sm mb-0.5 truncate" title={image ? `${image.name.split('.').slice(0, -1).join('.')}_secure.png` : 'dontsee_secure.png'}>
                             {image ? `${image.name.split('.').slice(0, -1).join('.')}_secure.png` : 'dontsee_secure.png'}

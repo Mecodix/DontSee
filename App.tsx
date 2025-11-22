@@ -26,7 +26,7 @@ const App: React.FC = () => {
     // New state for browser decoding phase
     const [isReading, setIsReading] = useState(false);
 
-    const { image, processFile, resetImage } = useImageHandler();
+    const { image, processFile, resetImage, usePasteHandler } = useImageHandler();
 
     const {
         password, setPassword,
@@ -112,6 +112,25 @@ const App: React.FC = () => {
         );
     };
 
+    // Hook up Paste Handler
+    usePasteHandler(
+        (file) => {
+             // Immediate feedback: Set reading to true
+            setIsReading(true);
+            resetStegoState();
+
+            processFile(
+                file,
+                (img) => onImageLoaded(img),
+                (msg) => {
+                    notify('error', msg || 'Failed to load pasted image');
+                    setIsReading(false);
+                }
+            );
+        },
+        (errorMsg) => notify('error', errorMsg)
+    );
+
     const handleReConceal = () => {
         setMode(AppMode.HIDE);
         resetStegoState();
@@ -168,7 +187,7 @@ const App: React.FC = () => {
 
             <main className="w-full max-w-5xl bg-surface-container border border-secondary-container rounded-[32px] overflow-hidden shadow-xl flex flex-col md:flex-row">
                 
-                <div className="md:w-1/3 bg-[#2b2930] p-8 flex flex-col border-b md:border-b-0 md:border-r border-secondary-container justify-center min-h-[200px]">
+                <div className="md:w-1/3 bg-surface-raised p-8 flex flex-col border-b md:border-b-0 md:border-r border-secondary-container justify-center min-h-[200px]">
                     {/* Unified Header: No Tabs */}
                     <div className="flex flex-col gap-4">
                         <h2 className="text-3xl font-bold text-white font-brand transition-all duration-300 animate-slide-up" key={headerTitle}>

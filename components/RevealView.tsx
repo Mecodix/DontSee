@@ -56,7 +56,7 @@ export const RevealView: React.FC<RevealViewProps> = ({
 
             <button onClick={() => image && onDecode(image)} disabled={isProcessing || !hasSignature}
                 className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2 relative overflow-hidden
-                ${isProcessing || !hasSignature ? 'bg-secondary-container text-outline cursor-not-allowed' : 'bg-secondary-container hover:bg-[#5c566b] text-white shadow-secondary-container/20'}`}>
+                ${isProcessing || !hasSignature ? 'bg-secondary-container text-outline cursor-not-allowed' : 'bg-secondary-container hover:bg-secondary-hover text-white shadow-secondary-container/20'}`}>
 
                 {isProcessing ? (
                     <div className="flex items-center gap-2 z-10 relative">
