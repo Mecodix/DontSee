@@ -2,7 +2,7 @@
 const SIG_UNLOCKED = "0100010001010011"; // "DS"
 const SIG_LOCKED = "0100010001001100";   // "DL"
 
-// PRNG for Scattering (Mulberry32)
+// PRNG (Mulberry32)
 function mulberry32(a: number) {
     return function() {
         var t = a += 0x6D2B79F5;
@@ -12,12 +12,36 @@ function mulberry32(a: number) {
     }
 }
 
+// GCD helper for LCG
+function gcd(a: number, b: number): number {
+    while (b !== 0) {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    return a;
+}
+
+// Convert logical valid index (ignoring alphas) to physical RGBA index
+function getPhysicalIndex(logicalIndex: number): number {
+    // logicalIndex = 3 * q + r
+    // physicalIndex = 4 * q + r
+    const q = Math.floor(logicalIndex / 3);
+    const r = logicalIndex % 3;
+    return (q * 4) + r;
+}
+
+// Count valid bytes up to a physical index
+function countValidBytes(physicalIndex: number): number {
+    return (3 * Math.floor(physicalIndex / 4)) + (physicalIndex % 4);
+}
+
 self.onmessage = async (e: MessageEvent) => {
     const { type, imageData, password, message } = e.data;
 
     try {
         if (type === 'encode') {
-            // 1. Determine Signature based on Password presence
+            // 1. Determine Signature
             const hasPassword = password && password.length > 0;
             const signature = hasPassword ? SIG_LOCKED : SIG_UNLOCKED;
 
@@ -39,7 +63,7 @@ self.onmessage = async (e: MessageEvent) => {
             const encryptedBuffer = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, encodedMsg);
             const encryptedBytes = new Uint8Array(encryptedBuffer);
 
-            // 3. Header Construction (Sequential)
+            // 3. Header Construction
             let headerBits = "";
             headerBits += signature;
             for(let b of salt) headerBits += b.toString(2).padStart(8, '0');
@@ -64,39 +88,47 @@ self.onmessage = async (e: MessageEvent) => {
                 else pixels[ptr] &= ~1;
                 ptr++;
             }
-
             const headerEndIndex = ptr;
 
-            // 6. Embed Body (Scattered)
+            // 6. Embed Body (Scattered LCG)
+            // Determine valid bytes range for body
+            const headerValidCount = countValidBytes(headerEndIndex);
+            const totalValidCount = (pixels.length / 4) * 3;
+            const bodyValidCount = totalValidCount - headerValidCount;
+
+            // Init PRNG
             const saltView = new DataView(salt.buffer);
-            // Use first 32 bits of salt as seed for higher entropy
             let seed = saltView.getUint32(0, true);
-
-            let availableCount = 0;
-            for(let i = headerEndIndex; i < pixels.length; i++) {
-                if ((i + 1) % 4 !== 0) availableCount++;
-            }
-
-            const availableChannels = new Uint32Array(availableCount);
-            let acPtr = 0;
-            for(let i = headerEndIndex; i < pixels.length; i++) {
-                if ((i + 1) % 4 !== 0) availableChannels[acPtr++] = i;
-            }
-
             const random = mulberry32(seed);
+
+            // Generate LCG parameters
+            const start = Math.floor(random() * bodyValidCount);
+            let step = Math.floor(random() * bodyValidCount);
+            if (step === 0) step = 1;
+
+            // Ensure step is coprime to bodyValidCount
+            while (gcd(step, bodyValidCount) !== 1) {
+                step = Math.floor(random() * bodyValidCount);
+                if (step === 0) step = 1;
+            }
+
             const needed = dataBitsLength;
 
             for (let i = 0; i < needed; i++) {
-                const j = i + Math.floor(random() * (availableChannels.length - i));
-                const temp = availableChannels[i];
-                availableChannels[i] = availableChannels[j];
-                availableChannels[j] = temp;
+                // LCG Step: Generate logical index in body space
+                const logicalBodyIndex = (start + i * step) % bodyValidCount;
 
+                // Convert to absolute logical index (skip header)
+                const absoluteLogicalIndex = headerValidCount + logicalBodyIndex;
+
+                // Convert to physical index (skip alphas)
+                const targetIdx = getPhysicalIndex(absoluteLogicalIndex);
+
+                // Write Bit
                 const byteIndex = Math.floor(i / 8);
                 const bitIndex = 7 - (i % 8);
                 const bit = (encryptedBytes[byteIndex] >>> bitIndex) & 1;
 
-                const targetIdx = availableChannels[i];
                 if (bit === 1) pixels[targetIdx] |= 1;
                 else pixels[targetIdx] &= ~1;
             }
@@ -139,30 +171,33 @@ self.onmessage = async (e: MessageEvent) => {
 
             // 2. Reconstruct Scatter Logic
             const headerEndIndex = ptr;
+
+            // Determine valid bytes range for body
+            const headerValidCount = countValidBytes(headerEndIndex);
+            const totalValidCount = (pixels.length / 4) * 3;
+            const bodyValidCount = totalValidCount - headerValidCount;
+
             const saltView = new DataView(salt.buffer);
             let seed = saltView.getUint32(0, true);
-
-            let availableCount = 0;
-            for(let i = headerEndIndex; i < pixels.length; i++) {
-                if ((i + 1) % 4 !== 0) availableCount++;
-            }
-
-            const availableChannels = new Uint32Array(availableCount);
-            let acPtr = 0;
-            for(let i = headerEndIndex; i < pixels.length; i++) {
-                if ((i + 1) % 4 !== 0) availableChannels[acPtr++] = i;
-            }
-
             const random = mulberry32(seed);
+
+            // Generate LCG parameters (must match encode)
+            const start = Math.floor(random() * bodyValidCount);
+            let step = Math.floor(random() * bodyValidCount);
+            if (step === 0) step = 1;
+
+            while (gcd(step, bodyValidCount) !== 1) {
+                step = Math.floor(random() * bodyValidCount);
+                if (step === 0) step = 1;
+            }
+
             const bodyBits = new Uint8Array(dataBitLength);
 
             for (let i = 0; i < dataBitLength; i++) {
-                const j = i + Math.floor(random() * (availableChannels.length - i));
-                const temp = availableChannels[i];
-                availableChannels[i] = availableChannels[j];
-                availableChannels[j] = temp;
+                const logicalBodyIndex = (start + i * step) % bodyValidCount;
+                const absoluteLogicalIndex = headerValidCount + logicalBodyIndex;
+                const targetIdx = getPhysicalIndex(absoluteLogicalIndex);
 
-                const targetIdx = availableChannels[i];
                 bodyBits[i] = pixels[targetIdx] & 1;
             }
 
