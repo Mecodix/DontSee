@@ -24,6 +24,12 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
     const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.stopPropagation();
+
+        // Prevent flicker when dragging over children
+        if (e.currentTarget.contains(e.relatedTarget as Node)) {
+            return;
+        }
+
         setIsDragging(false);
     };
 

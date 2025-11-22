@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { AppMode } from './types';
-import { IconBlinkingEye, IconDownload, IconEyeOff, IconHeart, IconLock, IconZap } from './components/Icons';
+import { IconBlinkingEye, IconHeart } from './components/Icons';
 import { Toast } from './components/Toast';
 import { ImagePreview } from './components/ImagePreview';
+import { ConcealView } from './components/ConcealView';
+import { RevealView } from './components/RevealView';
 import { calculateMaxBytes, getByteLength } from './utils/capacity';
 import { useImageHandler } from './hooks/useImageHandler';
 import { useSteganography } from './hooks/useSteganography';
@@ -116,8 +118,6 @@ const App: React.FC = () => {
     };
 
     const currentBytes = getByteLength(message);
-    const usagePercent = maxBytes > 0 ? Math.min((currentBytes / maxBytes) * 100, 100) : 0;
-    const isOverLimit = currentBytes > maxBytes;
 
     const getButtonLabel = () => {
         if (!isProcessing) return null;
@@ -192,133 +192,38 @@ const App: React.FC = () => {
                                 </div>
                             ) : (
                                 mode === AppMode.HIDE ? (
-                                    <>
-                                        <div className="flex flex-col gap-2">
-                                            <textarea
-                                                value={message}
-                                                onChange={(e) => setMessage(e.target.value)}
-                                                placeholder="Enter secret message here..."
-                                                className={`flex-1 bg-surface border text-white rounded-2xl p-4 resize-none focus:outline-none focus:ring-1 transition-colors placeholder-outline min-h-[120px]
-                                                ${isOverLimit ? 'border-error focus:border-error focus:ring-error' : 'border-secondary-container focus:border-primary focus:ring-primary'}`}
-                                            ></textarea>
-
-                                            <div className="flex items-center gap-3 px-1">
-                                                <div className="flex-1 h-1.5 bg-surface rounded-full overflow-hidden">
-                                                    <div
-                                                        className={`h-full transition-all duration-300 ${isOverLimit ? 'bg-error' : 'bg-primary'}`}
-                                                        style={{ width: `${usagePercent}%` }}
-                                                    ></div>
-                                                </div>
-                                                <span className={`text-xs font-mono ${isOverLimit ? 'text-error font-bold' : 'text-outline'}`}>
-                                                    {currentBytes} / {maxBytes} bytes
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <IconLock className="text-outline" />
-                                            </div>
-                                            <input 
-                                                type="password"
-                                                value={password}
-                                                onChange={(e) => setPassword(e.target.value)}
-                                                placeholder="Set Password (Optional)"
-                                                className="w-full bg-surface border border-secondary-container text-white text-sm rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder-outline"
-                                            />
-                                        </div>
-
-                                        {resultBlobUrl ? (
-                                            <div className="animate-slide-up bg-[#2b2930] border border-secondary-container p-4 rounded-2xl flex items-center justify-between">
-                                                <div className="flex flex-col justify-center max-w-[70%]">
-                                                    <p className="text-white font-bold text-sm mb-0.5 truncate" title={image ? `${image.name.split('.').slice(0, -1).join('.')}_secure.png` : 'dontsee_secure.png'}>
-                                                        {image ? `${image.name.split('.').slice(0, -1).join('.')}_secure.png` : 'dontsee_secure.png'}
-                                                    </p>
-                                                    <p className="text-outline text-xs font-mono">{formatBytes(resultSize)}</p>
-                                                </div>
-                                                <a
-                                                    href={resultBlobUrl}
-                                                    download={image ? `${image.name.split('.').slice(0, -1).join('.')}_secure.png` : 'dontsee_secure.png'}
-                                                    className="w-12 h-12 bg-primary hover:bg-white text-on-primary rounded-full flex items-center justify-center transition-transform active:scale-95 shadow-lg flex-shrink-0"
-                                                    aria-label="Download encoded image"
-                                                >
-                                                    <IconDownload className="w-6 h-6" />
-                                                </a>
-                                            </div>
-                                        ) : (
-                                            <button onClick={() => processEncode(image)} disabled={isProcessing || !message || isOverLimit}
-                                                aria-label="Encrypt and conceal message"
-                                                className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2 relative overflow-hidden
-                                                ${(!message || isOverLimit) ? 'bg-surface-container text-secondary-container border border-secondary-container cursor-not-allowed' : 'bg-primary hover:bg-white text-on-primary shadow-primary/10'}`}>
-
-                                                {isProcessing ? (
-                                                    <div className="flex items-center gap-2 z-10 relative">
-                                                        <div className="w-5 h-5 border-4 border-on-primary/30 border-t-on-primary rounded-full animate-spin-slow" aria-label="Processing"></div>
-                                                        <span>{getButtonLabel()}</span>
-                                                    </div>
-                                                ) : (
-                                                    <><IconEyeOff className="w-5 h-5"/> Conceal</>
-                                                )}
-
-                                                {isProcessing && stage === 'processing' && (
-                                                    <div className="absolute inset-0 bg-white/20 z-0 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }}></div>
-                                                )}
-                                                {isProcessing && stage !== 'processing' && (
-                                                    <div className="absolute inset-0 bg-white/10 z-0 animate-pulse"></div>
-                                                )}
-                                            </button>
-                                        )}
-                                    </>
+                                    <ConcealView
+                                        image={image}
+                                        message={message}
+                                        setMessage={setMessage}
+                                        password={password}
+                                        setPassword={setPassword}
+                                        maxBytes={maxBytes}
+                                        currentBytes={currentBytes}
+                                        isProcessing={isProcessing}
+                                        stage={stage}
+                                        progress={progress}
+                                        resultBlobUrl={resultBlobUrl}
+                                        resultSize={resultSize}
+                                        onEncode={processEncode}
+                                        getButtonLabel={getButtonLabel}
+                                        formatBytes={formatBytes}
+                                    />
                                 ) : (
-                                    <>
-                                        {requiresPassword && (
-                                            <div className="relative animate-slide-up">
-                                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                    <IconLock className="text-outline" />
-                                                </div>
-                                                <input
-                                                    type="password"
-                                                    value={password}
-                                                    onChange={(e) => setPassword(e.target.value)}
-                                                    placeholder="Enter Password to Unlock"
-                                                    className="w-full bg-surface border border-secondary-container text-white text-sm rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder-outline"
-                                                />
-                                            </div>
-                                        )}
-
-                                        {decodedMessage && (
-                                            <div className="flex-1 bg-surface-container border border-primary/50 rounded-2xl p-6 flex items-center justify-center transition-colors min-h-[120px] animate-slide-up">
-                                                <p className="w-full text-left text-primary font-mono text-sm break-words whitespace-pre-wrap">{decodedMessage}</p>
-                                            </div>
-                                        )}
-
-                                        <button onClick={() => processDecode(image)} disabled={isProcessing || !hasSignature}
-                                            className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2 relative overflow-hidden
-                                            ${isProcessing || !hasSignature ? 'bg-secondary-container text-outline cursor-not-allowed' : 'bg-secondary-container hover:bg-[#5c566b] text-white shadow-secondary-container/20'}`}>
-
-                                            {isProcessing ? (
-                                                <div className="flex items-center gap-2 z-10 relative">
-                                                    <div className="w-5 h-5 border-4 border-white/30 border-t-white rounded-full animate-spin-slow"></div>
-                                                    <span>{getButtonLabel()}</span>
-                                                </div>
-                                            ) : (
-                                                <><IconZap className="w-5 h-5"/> Reveal</>
-                                            )}
-
-                                            {isProcessing && stage === 'processing' && (
-                                                <div className="absolute inset-0 bg-white/10 z-0 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }}></div>
-                                            )}
-                                            {isProcessing && stage !== 'processing' && (
-                                                <div className="absolute inset-0 bg-white/5 z-0 animate-pulse"></div>
-                                            )}
-                                        </button>
-
-                                        <div className="w-full text-center mt-4 animate-slide-up">
-                                            <button onClick={handleReConceal} className="text-sm text-outline hover:text-primary transition-colors">
-                                                Want to use this image again? <strong>Re-Conceal</strong>
-                                            </button>
-                                        </div>
-                                    </>
+                                    <RevealView
+                                        image={image}
+                                        password={password}
+                                        setPassword={setPassword}
+                                        decodedMessage={decodedMessage}
+                                        requiresPassword={requiresPassword}
+                                        hasSignature={hasSignature}
+                                        isProcessing={isProcessing}
+                                        stage={stage}
+                                        progress={progress}
+                                        onDecode={processDecode}
+                                        onReConceal={handleReConceal}
+                                        getButtonLabel={getButtonLabel}
+                                    />
                                 )
                             )}
                         </div>
