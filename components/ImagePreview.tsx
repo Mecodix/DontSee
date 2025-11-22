@@ -62,7 +62,7 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
             className={`relative rounded-3xl overflow-hidden border-2 transition-all duration-300 w-full
             ${image 
                 ? 'border-secondary-container bg-surface' 
-                : `min-h-[400px] cursor-pointer group ${isDragging
+                : `min-h-[250px] md:min-h-[400px] cursor-pointer group ${isDragging
                     ? 'border-primary bg-primary/10'
                     : 'border-dashed border-secondary-container hover:border-primary hover:bg-secondary-container/20 focus-within:border-primary focus-within:bg-secondary-container/20'}`
             }`}>
@@ -76,7 +76,7 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
 
             {image ? (
                 <div className="w-full relative flex justify-center bg-black/50">
-                    <img src={image.src} className="w-full h-auto max-h-[500px] min-h-[300px] object-contain" alt="Preview" />
+                    <img src={image.src} className="w-full h-auto max-h-[500px] min-h-[200px] md:min-h-[300px] object-contain" alt="Preview" />
                     
                     <button onClick={onReset} 
                         disabled={isLoading}

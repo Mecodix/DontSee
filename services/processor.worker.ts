@@ -96,6 +96,7 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
 }
 
 async function handleEncode(
+    id: string,
     pixels: PixelArray,
     canvas: OffscreenCanvas | null,
     ctx: OffscreenCanvasRenderingContext2D | null,
@@ -160,7 +161,7 @@ async function handleEncode(
             const now = performance.now();
             if (now - lastReportTime > 33) {
                 const progress = Math.floor((i / needed) * 100);
-                postMessage({ success: true, progress });
+                postMessage({ id, success: true, progress });
                 await new Promise(r => setTimeout(r, 0));
                 lastReportTime = performance.now();
             }
@@ -179,21 +180,21 @@ async function handleEncode(
     }
 
     // Finalize
-    postMessage({ success: true, progress: 100 });
+    postMessage({ id, success: true, progress: 100 });
 
     if (canvas && ctx) {
         // OffscreenCanvas Path: Convert directly to Blob
         const newImageData = new ImageData(pixels, canvas.width, canvas.height);
         ctx.putImageData(newImageData, 0, 0);
         const blob = await canvas.convertToBlob({ type: 'image/png' });
-        postMessage({ success: true, blob });
+        postMessage({ id, success: true, blob });
     } else {
         // Legacy/Fallback Path: Return pixels
-        postMessage({ success: true, pixels: pixels.buffer, width, height }, { transfer: [pixels.buffer] });
+        postMessage({ id, success: true, pixels: pixels.buffer, width, height }, { transfer: [pixels.buffer] });
     }
 }
 
-async function handleDecode(pixels: PixelArray, password?: string) {
+async function handleDecode(id: string, pixels: PixelArray, password?: string) {
     let ptr = 0;
     const readBits = (count: number) => {
         let bits = "";
@@ -240,7 +241,7 @@ async function handleDecode(pixels: PixelArray, password?: string) {
             const now = performance.now();
             if (now - lastReportTime > 33) {
                 const progress = Math.floor((i / dataBitLength) * 100);
-                postMessage({ success: true, progress });
+                postMessage({ id, success: true, progress });
                 await new Promise(r => setTimeout(r, 0));
                 lastReportTime = performance.now();
             }
@@ -253,7 +254,7 @@ async function handleDecode(pixels: PixelArray, password?: string) {
         bodyBits[i] = pixels[targetIdx] & 1;
     }
 
-    postMessage({ success: true, progress: 100 });
+    postMessage({ id, success: true, progress: 100 });
 
     const encryptedBytes = new Uint8Array(dataBitLength / 8);
     for(let i=0; i<encryptedBytes.length; i++) {
@@ -273,13 +274,13 @@ async function handleDecode(pixels: PixelArray, password?: string) {
         const decryptedBytes = new Uint8Array(decryptedBuf);
         const text = await decompress(decryptedBytes);
 
-        postMessage({ success: true, text });
+        postMessage({ id, success: true, text });
     } catch(e) {
-        postMessage({ success: false, error: "Decryption failed" });
+        postMessage({ id, success: false, error: "Decryption failed" });
     }
 }
 
-function handleScan(pixels: PixelArray) {
+function handleScan(id: string, pixels: PixelArray) {
     // Scan is fast, just check first pixels
     let ptr = 0;
     let sig = "";
@@ -293,11 +294,11 @@ function handleScan(pixels: PixelArray) {
     if (sig === SIG_LOCKED) result = 'locked';
     else if (sig === SIG_UNLOCKED) result = 'unlocked';
 
-    postMessage({ success: true, signature: result });
+    postMessage({ id, success: true, signature: result });
 }
 
 self.onmessage = async (e: MessageEvent) => {
-    const { type, imageData, imageBitmap, password, message } = e.data;
+    const { id, type, imageData, imageBitmap, password, message } = e.data;
 
     try {
         // 1. Handle Image Source (OffscreenCanvas vs ArrayBuffer)
@@ -342,14 +343,14 @@ self.onmessage = async (e: MessageEvent) => {
         }
 
         if (type === 'encode') {
-            await handleEncode(pixels, canvas, ctx, width, height, message, password);
+            await handleEncode(id, pixels, canvas, ctx, width, height, message, password);
         } else if (type === 'decode') {
-            await handleDecode(pixels, password);
+            await handleDecode(id, pixels, password);
         } else if (type === 'scan') {
-            handleScan(pixels);
+            handleScan(id, pixels);
         }
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Unknown worker error";
-        postMessage({ success: false, error: errorMessage });
+        postMessage({ id, success: false, error: errorMessage });
     }
 };

@@ -1,7 +1,14 @@
 import { WorkerRequest, WorkerResponse, SignatureType } from '../types';
 
+interface PendingRequest {
+    resolve: (response: WorkerResponse) => void;
+    reject: (error: any) => void;
+    onProgress?: (p: number) => void;
+}
+
 class SteganographyService {
     private worker: Worker | null = null;
+    private pendingRequests = new Map<string, PendingRequest>();
 
     constructor() {
         this.initWorker();
@@ -9,6 +16,48 @@ class SteganographyService {
 
     private initWorker() {
         this.worker = new Worker(new URL('./processor.worker.ts', import.meta.url), { type: 'module' });
+        this.worker.onmessage = this.handleWorkerMessage.bind(this);
+        this.worker.onerror = this.handleWorkerError.bind(this);
+    }
+
+    private handleWorkerMessage(e: MessageEvent) {
+        const data = e.data as WorkerResponse;
+        const { id, progress, success, error } = data;
+
+        const request = this.pendingRequests.get(id);
+        if (!request) return; // Request might have been cancelled or ID is wrong
+
+        if (progress !== undefined) {
+            if (request.onProgress) {
+                request.onProgress(progress);
+            }
+            return;
+        }
+
+        // Completion or Error
+        if (success) {
+            request.resolve(data);
+        } else {
+            request.reject(new Error(error || 'Unknown worker error'));
+        }
+
+        this.pendingRequests.delete(id);
+    }
+
+    private handleWorkerError(e: ErrorEvent) {
+        console.error("Worker global error:", e);
+        // Global worker error - might need to reject all pending?
+        // For now, relying on per-request error handling if possible,
+        // but this usually means the worker crashed or syntax error.
+        // Let's iterate and reject all.
+        for (const [id, req] of this.pendingRequests) {
+            req.reject(new Error(`Worker crashed: ${e.message}`));
+        }
+        this.pendingRequests.clear();
+
+        // Restart worker for future requests
+        this.terminate();
+        this.initWorker();
     }
 
     public terminate() {
@@ -16,42 +65,23 @@ class SteganographyService {
             this.worker.terminate();
             this.worker = null;
         }
+        this.pendingRequests.clear();
     }
 
     private sendRequest(
-        message: WorkerRequest,
+        messageWithoutId: Omit<WorkerRequest, 'id'>,
         transferrables: Transferable[],
         onProgress?: (p: number) => void
     ): Promise<WorkerResponse> {
         if (!this.worker) this.initWorker();
         
+        const id = crypto.randomUUID();
+        const message = { ...messageWithoutId, id } as WorkerRequest;
+
         return new Promise((resolve, reject) => {
             if (!this.worker) return reject('Worker not initialized');
 
-            const cleanup = () => {
-                this.worker?.removeEventListener('message', messageHandler);
-                this.worker?.removeEventListener('error', errorHandler);
-            };
-
-            const messageHandler = (e: MessageEvent) => {
-                const data = e.data as WorkerResponse;
-
-                if (data.progress !== undefined) {
-                    if (onProgress) onProgress(data.progress);
-                    return;
-                }
-
-                cleanup();
-                resolve(data);
-            };
-
-            const errorHandler = (e: ErrorEvent) => {
-                cleanup();
-                reject(new Error(`Worker error: ${e.message}`));
-            };
-
-            this.worker.addEventListener('message', messageHandler);
-            this.worker.addEventListener('error', errorHandler);
+            this.pendingRequests.set(id, { resolve, reject, onProgress });
             this.worker.postMessage(message, transferrables);
         });
     }
@@ -61,7 +91,6 @@ class SteganographyService {
         return result.signature || null;
     }
 
-    // Updated to support ImageBitmap input and Blob output
     public async encode(
         imageBitmap: ImageBitmap,
         message: string,
