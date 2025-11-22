@@ -9,6 +9,7 @@ export interface AppImage {
     width: number;
     height: number;
     src: string;
+    name: string;
 }
 
 export interface NotificationState {
