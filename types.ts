@@ -38,6 +38,8 @@ export interface WorkerResponse {
     // NEW: Return Blob directly from worker
     blob?: Blob;
     pixels?: ArrayBuffer; // Legacy/Fallback
+    width?: number; // For fallback reconstruction
+    height?: number; // For fallback reconstruction
     text?: string;
     signature?: SignatureType;
     error?: string;

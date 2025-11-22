@@ -64,8 +64,24 @@ class SteganographyService {
             password: password || '' 
         }, [imageBitmap], onProgress);
 
-        if (result.success && result.blob) {
-            return result.blob;
+        if (result.success) {
+            if (result.blob) {
+                return result.blob;
+            }
+            // Fallback for OffscreenCanvas failure: Reconstruct Blob from pixels
+            if (result.pixels && result.width && result.height) {
+                const canvas = document.createElement('canvas');
+                canvas.width = result.width;
+                canvas.height = result.height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) throw new Error("Failed to create canvas for blob conversion");
+
+                const imageData = new ImageData(new Uint8ClampedArray(result.pixels), result.width, result.height);
+                ctx.putImageData(imageData, 0, 0);
+
+                const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+                if (blob) return blob;
+            }
         }
         throw new Error(result.error || 'Encoding failed');
     }

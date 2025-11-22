@@ -5,11 +5,10 @@ const SIG_UNLOCKED = "0100010001010011"; // "DS"
 const SIG_LOCKED = "0100010001001100";   // "DL"
 
 // Internal Constant for "Empty Password"
-// This is used because hash-wasm requires a non-empty string/buffer.
-// We use a unique string that is unlikely to be chosen by a user.
-// Note: This means if a user literally types this string, it's equivalent to empty.
-// But for a steganography app, this is an acceptable trade-off for "Optional" password support.
 const EMPTY_PASSWORD_SENTINEL = "___DONTSEE_EMPTY_PASSWORD_SENTINEL_V1___";
+
+// Types
+type PixelArray = Uint8ClampedArray;
 
 // PRNG (Mulberry32)
 function mulberry32(a: number) {
@@ -80,6 +79,240 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
     );
 }
 
+async function handleEncode(
+    pixels: PixelArray,
+    canvas: OffscreenCanvas | null,
+    ctx: OffscreenCanvasRenderingContext2D | null,
+    message: string,
+    password?: string
+) {
+    const hasPassword = password && password.length > 0;
+    const signature = hasPassword ? SIG_LOCKED : SIG_UNLOCKED;
+
+    // Crypto Setup
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+
+    // Derive Key using Argon2id
+    const key = await deriveKey(password || "", salt);
+
+    // Compress before encrypting
+    const compressedMsg = await compress(message);
+
+    const encryptedBuffer = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, compressedMsg);
+    const encryptedBytes = new Uint8Array(encryptedBuffer);
+
+    // Header Construction
+    let headerBits = "";
+    headerBits += signature;
+    for(let b of salt) headerBits += b.toString(2).padStart(8, '0');
+    for(let b of iv) headerBits += b.toString(2).padStart(8, '0');
+
+    const dataBitsLength = encryptedBytes.length * 8;
+    headerBits += dataBitsLength.toString(2).padStart(32, '0');
+
+    // Capacity Check
+    const totalPixels = pixels.length / 4;
+    if ((headerBits.length + dataBitsLength) > totalPixels * 3) {
+            throw new Error("Message too long for this image size");
+    }
+
+    // Embed Header (Sequential)
+    let ptr = 0;
+    for (let i = 0; i < headerBits.length; i++) {
+        while ((ptr + 1) % 4 === 0) ptr++;
+        if (headerBits[i] === '1') pixels[ptr] |= 1;
+        else pixels[ptr] &= ~1;
+        ptr++;
+    }
+    const headerEndIndex = ptr;
+
+    // Embed Body (Scattered LCG)
+    const headerValidCount = countValidBytes(headerEndIndex);
+    const totalValidCount = (pixels.length / 4) * 3;
+    const bodyValidCount = totalValidCount - headerValidCount;
+
+    const saltView = new DataView(salt.buffer);
+    let seed = saltView.getUint32(0, true);
+    const random = mulberry32(seed);
+
+    const start = Math.floor(random() * bodyValidCount);
+    let step = Math.floor(random() * bodyValidCount);
+    if (step === 0) step = 1;
+    while (gcd(step, bodyValidCount) !== 1) {
+        step = Math.floor(random() * bodyValidCount);
+        if (step === 0) step = 1;
+    }
+
+    const needed = dataBitsLength;
+    let lastReportTime = performance.now();
+
+    for (let i = 0; i < needed; i++) {
+        if (i % 1000 === 0) {
+            const now = performance.now();
+            if (now - lastReportTime > 33) {
+                const progress = Math.floor((i / needed) * 100);
+                postMessage({ success: true, progress });
+                await new Promise(r => setTimeout(r, 0));
+                lastReportTime = performance.now();
+            }
+        }
+
+        const logicalBodyIndex = (start + i * step) % bodyValidCount;
+        const absoluteLogicalIndex = headerValidCount + logicalBodyIndex;
+        const targetIdx = getPhysicalIndex(absoluteLogicalIndex);
+
+        const byteIndex = Math.floor(i / 8);
+        const bitIndex = 7 - (i % 8);
+        const bit = (encryptedBytes[byteIndex] >>> bitIndex) & 1;
+
+        if (bit === 1) pixels[targetIdx] |= 1;
+        else pixels[targetIdx] &= ~1;
+    }
+
+    // Finalize
+    postMessage({ success: true, progress: 100 });
+
+    if (canvas && ctx) {
+        // OffscreenCanvas Path: Convert directly to Blob
+        const newImageData = new ImageData(pixels, canvas.width, canvas.height);
+        ctx.putImageData(newImageData, 0, 0);
+        const blob = await canvas.convertToBlob({ type: 'image/png' });
+        postMessage({ success: true, blob });
+    } else {
+        // Legacy/Fallback Path: Return pixels
+        // Also return dimensions so main thread can reconstruct
+        const width = (canvas && canvas.width) || (pixels.length / 4); // Rough guess if no width, but should be passed
+        // Actually if we are in fallback path, we might not have canvas.width
+        // But 'pixels' comes from 'imageData' or 'imageBitmap'.
+        // If imageBitmap, we have canvas. If imageData, we just have buffer.
+        // We should probably pass width/height in the message if possible, but here we transfer buffer.
+        // The main thread knows the dimensions because it sent them or the original image.
+        // But to be safe, let's assume main thread tracks it.
+        // Wait, steganographyService needs to reconstruct it.
+        // We should send width/height if we can.
+
+        let w = 0, h = 0;
+        if (canvas) { w = canvas.width; h = canvas.height; }
+
+        postMessage({ success: true, pixels: pixels.buffer, width: w, height: h }, { transfer: [pixels.buffer] });
+    }
+}
+
+async function handleDecode(pixels: PixelArray, password?: string) {
+    let ptr = 0;
+    const readBits = (count: number) => {
+        let bits = "";
+        for(let i=0; i<count; i++) {
+            while ((ptr + 1) % 4 === 0) ptr++;
+            bits += (pixels[ptr] & 1).toString();
+            ptr++;
+        }
+        return bits;
+    };
+
+    // Extract Header
+    const sig = readBits(16);
+    if (sig !== SIG_UNLOCKED && sig !== SIG_LOCKED) {
+        throw new Error("No DontSee signature found");
+    }
+
+    const saltBits = readBits(128);
+    const salt = new Uint8Array(16);
+    for(let i=0; i<16; i++) salt[i] = parseInt(saltBits.slice(i*8, (i+1)*8), 2);
+
+    const ivBits = readBits(96);
+    const iv = new Uint8Array(12);
+    for(let i=0; i<12; i++) iv[i] = parseInt(ivBits.slice(i*8, (i+1)*8), 2);
+
+    const lenBits = readBits(32);
+    const dataBitLength = parseInt(lenBits, 2);
+
+    if (dataBitLength <= 0 || dataBitLength > pixels.length * 3) throw new Error("Corrupt header data");
+
+    // Reconstruct Scatter Logic
+    const headerEndIndex = ptr;
+    const headerValidCount = countValidBytes(headerEndIndex);
+    const totalValidCount = (pixels.length / 4) * 3;
+    const bodyValidCount = totalValidCount - headerValidCount;
+
+    const saltView = new DataView(salt.buffer);
+    let seed = saltView.getUint32(0, true);
+    const random = mulberry32(seed);
+
+    const start = Math.floor(random() * bodyValidCount);
+    let step = Math.floor(random() * bodyValidCount);
+    if (step === 0) step = 1;
+
+    while (gcd(step, bodyValidCount) !== 1) {
+        step = Math.floor(random() * bodyValidCount);
+        if (step === 0) step = 1;
+    }
+
+    const bodyBits = new Uint8Array(dataBitLength);
+    let lastReportTime = performance.now();
+
+    for (let i = 0; i < dataBitLength; i++) {
+        if (i % 1000 === 0) {
+            const now = performance.now();
+            if (now - lastReportTime > 33) {
+                const progress = Math.floor((i / dataBitLength) * 100);
+                postMessage({ success: true, progress });
+                await new Promise(r => setTimeout(r, 0));
+                lastReportTime = performance.now();
+            }
+        }
+
+        const logicalBodyIndex = (start + i * step) % bodyValidCount;
+        const absoluteLogicalIndex = headerValidCount + logicalBodyIndex;
+        const targetIdx = getPhysicalIndex(absoluteLogicalIndex);
+
+        bodyBits[i] = pixels[targetIdx] & 1;
+    }
+
+    postMessage({ success: true, progress: 100 });
+
+    const encryptedBytes = new Uint8Array(dataBitLength / 8);
+    for(let i=0; i<encryptedBytes.length; i++) {
+        let byteVal = 0;
+        for(let bit=0; bit<8; bit++) {
+            byteVal = (byteVal << 1) | bodyBits[i*8 + bit];
+        }
+        encryptedBytes[i] = byteVal;
+    }
+
+    // Decrypt
+    try {
+        const key = await deriveKey(password || "", salt);
+
+        const decryptedBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, encryptedBytes);
+
+        const decryptedBytes = new Uint8Array(decryptedBuf);
+        const text = await decompress(decryptedBytes);
+
+        postMessage({ success: true, text });
+    } catch(e) {
+        postMessage({ success: false, error: "Decryption failed" });
+    }
+}
+
+function handleScan(pixels: PixelArray) {
+    // Scan is fast, just check first pixels
+    let ptr = 0;
+    let sig = "";
+    for(let i=0; i<16; i++) {
+        while ((ptr + 1) % 4 === 0) ptr++;
+        sig += (pixels[ptr] & 1).toString();
+        ptr++;
+    }
+
+    let result = null;
+    if (sig === SIG_LOCKED) result = 'locked';
+    else if (sig === SIG_UNLOCKED) result = 'unlocked';
+
+    postMessage({ success: true, signature: result });
+}
+
 self.onmessage = async (e: MessageEvent) => {
     const { type, imageData, imageBitmap, password, message } = e.data;
 
@@ -103,221 +336,14 @@ self.onmessage = async (e: MessageEvent) => {
         }
 
         if (type === 'encode') {
-            // Determine Signature
-            const hasPassword = password && password.length > 0;
-            const signature = hasPassword ? SIG_LOCKED : SIG_UNLOCKED;
-
-            // Crypto Setup
-            const salt = crypto.getRandomValues(new Uint8Array(16));
-            const iv = crypto.getRandomValues(new Uint8Array(12));
-
-            // Derive Key using Argon2id
-            const key = await deriveKey(password || "", salt);
-
-            // Compress before encrypting
-            const compressedMsg = await compress(message);
-
-            const encryptedBuffer = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, compressedMsg);
-            const encryptedBytes = new Uint8Array(encryptedBuffer);
-
-            // Header Construction
-            let headerBits = "";
-            headerBits += signature;
-            for(let b of salt) headerBits += b.toString(2).padStart(8, '0');
-            for(let b of iv) headerBits += b.toString(2).padStart(8, '0');
-
-            const dataBitsLength = encryptedBytes.length * 8;
-            headerBits += dataBitsLength.toString(2).padStart(32, '0');
-
-            // Capacity Check
-            const totalPixels = pixels.length / 4;
-            if ((headerBits.length + dataBitsLength) > totalPixels * 3) {
-                    throw new Error("Message too long for this image size");
-            }
-
-            // Embed Header (Sequential)
-            let ptr = 0;
-            for (let i = 0; i < headerBits.length; i++) {
-                while ((ptr + 1) % 4 === 0) ptr++;
-                if (headerBits[i] === '1') pixels[ptr] |= 1;
-                else pixels[ptr] &= ~1;
-                ptr++;
-            }
-            const headerEndIndex = ptr;
-
-            // Embed Body (Scattered LCG)
-            const headerValidCount = countValidBytes(headerEndIndex);
-            const totalValidCount = (pixels.length / 4) * 3;
-            const bodyValidCount = totalValidCount - headerValidCount;
-
-            const saltView = new DataView(salt.buffer);
-            let seed = saltView.getUint32(0, true);
-            const random = mulberry32(seed);
-
-            const start = Math.floor(random() * bodyValidCount);
-            let step = Math.floor(random() * bodyValidCount);
-            if (step === 0) step = 1;
-            while (gcd(step, bodyValidCount) !== 1) {
-                step = Math.floor(random() * bodyValidCount);
-                if (step === 0) step = 1;
-            }
-
-            const needed = dataBitsLength;
-            let lastReportTime = performance.now();
-
-            for (let i = 0; i < needed; i++) {
-                if (i % 1000 === 0) {
-                    const now = performance.now();
-                    if (now - lastReportTime > 33) {
-                        const progress = Math.floor((i / needed) * 100);
-                        postMessage({ success: true, progress });
-                        await new Promise(r => setTimeout(r, 0));
-                        lastReportTime = performance.now();
-                    }
-                }
-
-                const logicalBodyIndex = (start + i * step) % bodyValidCount;
-                const absoluteLogicalIndex = headerValidCount + logicalBodyIndex;
-                const targetIdx = getPhysicalIndex(absoluteLogicalIndex);
-
-                const byteIndex = Math.floor(i / 8);
-                const bitIndex = 7 - (i % 8);
-                const bit = (encryptedBytes[byteIndex] >>> bitIndex) & 1;
-
-                if (bit === 1) pixels[targetIdx] |= 1;
-                else pixels[targetIdx] &= ~1;
-            }
-
-            // Finalize
-            postMessage({ success: true, progress: 100 });
-
-            if (canvas && ctx) {
-                // OffscreenCanvas Path: Convert directly to Blob
-                const newImageData = new ImageData(pixels, canvas.width, canvas.height);
-                ctx.putImageData(newImageData, 0, 0);
-                const blob = await canvas.convertToBlob({ type: 'image/png' });
-                postMessage({ success: true, blob });
-            } else {
-                // Legacy/Fallback Path: Return pixels
-                postMessage({ success: true, pixels: pixels.buffer }, { transfer: [pixels.buffer] });
-            }
+            await handleEncode(pixels, canvas, ctx, message, password);
+        } else if (type === 'decode') {
+            await handleDecode(pixels, password);
+        } else if (type === 'scan') {
+            handleScan(pixels);
         }
-
-        if (type === 'decode') {
-            let ptr = 0;
-            const readBits = (count: number) => {
-                let bits = "";
-                for(let i=0; i<count; i++) {
-                    while ((ptr + 1) % 4 === 0) ptr++;
-                    bits += (pixels[ptr] & 1).toString();
-                    ptr++;
-                }
-                return bits;
-            };
-
-            // Extract Header
-            const sig = readBits(16);
-            if (sig !== SIG_UNLOCKED && sig !== SIG_LOCKED) {
-                throw new Error("No DontSee signature found");
-            }
-
-            const saltBits = readBits(128);
-            const salt = new Uint8Array(16);
-            for(let i=0; i<16; i++) salt[i] = parseInt(saltBits.slice(i*8, (i+1)*8), 2);
-
-            const ivBits = readBits(96);
-            const iv = new Uint8Array(12);
-            for(let i=0; i<12; i++) iv[i] = parseInt(ivBits.slice(i*8, (i+1)*8), 2);
-
-            const lenBits = readBits(32);
-            const dataBitLength = parseInt(lenBits, 2);
-
-            if (dataBitLength <= 0 || dataBitLength > pixels.length * 3) throw new Error("Corrupt header data");
-
-            // Reconstruct Scatter Logic
-            const headerEndIndex = ptr;
-            const headerValidCount = countValidBytes(headerEndIndex);
-            const totalValidCount = (pixels.length / 4) * 3;
-            const bodyValidCount = totalValidCount - headerValidCount;
-
-            const saltView = new DataView(salt.buffer);
-            let seed = saltView.getUint32(0, true);
-            const random = mulberry32(seed);
-
-            const start = Math.floor(random() * bodyValidCount);
-            let step = Math.floor(random() * bodyValidCount);
-            if (step === 0) step = 1;
-
-            while (gcd(step, bodyValidCount) !== 1) {
-                step = Math.floor(random() * bodyValidCount);
-                if (step === 0) step = 1;
-            }
-
-            const bodyBits = new Uint8Array(dataBitLength);
-            let lastReportTime = performance.now();
-
-            for (let i = 0; i < dataBitLength; i++) {
-                if (i % 1000 === 0) {
-                    const now = performance.now();
-                    if (now - lastReportTime > 33) {
-                        const progress = Math.floor((i / dataBitLength) * 100);
-                        postMessage({ success: true, progress });
-                        await new Promise(r => setTimeout(r, 0));
-                        lastReportTime = performance.now();
-                    }
-                }
-
-                const logicalBodyIndex = (start + i * step) % bodyValidCount;
-                const absoluteLogicalIndex = headerValidCount + logicalBodyIndex;
-                const targetIdx = getPhysicalIndex(absoluteLogicalIndex);
-
-                bodyBits[i] = pixels[targetIdx] & 1;
-            }
-
-            postMessage({ success: true, progress: 100 });
-
-            const encryptedBytes = new Uint8Array(dataBitLength / 8);
-            for(let i=0; i<encryptedBytes.length; i++) {
-                let byteVal = 0;
-                for(let bit=0; bit<8; bit++) {
-                    byteVal = (byteVal << 1) | bodyBits[i*8 + bit];
-                }
-                encryptedBytes[i] = byteVal;
-            }
-
-            // Decrypt
-            try {
-                const key = await deriveKey(password || "", salt);
-
-                const decryptedBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, encryptedBytes);
-
-                const decryptedBytes = new Uint8Array(decryptedBuf);
-                const text = await decompress(decryptedBytes);
-
-                postMessage({ success: true, text });
-            } catch(e) {
-                postMessage({ success: false, error: "Decryption failed" });
-            }
-        }
-
-        if (type === 'scan') {
-            // Scan is fast, just check first pixels
-            let ptr = 0;
-            let sig = "";
-            for(let i=0; i<16; i++) {
-                while ((ptr + 1) % 4 === 0) ptr++;
-                sig += (pixels[ptr] & 1).toString();
-                ptr++;
-            }
-
-            let result = null;
-            if (sig === SIG_LOCKED) result = 'locked';
-            else if (sig === SIG_UNLOCKED) result = 'unlocked';
-
-            postMessage({ success: true, signature: result });
-        }
-
-    } catch (err: any) {
-        postMessage({ success: false, error: err.message });
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Unknown worker error";
+        postMessage({ success: false, error: errorMessage });
     }
 };
