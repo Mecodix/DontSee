@@ -114,7 +114,19 @@ self.onmessage = async (e: MessageEvent) => {
 
             const needed = dataBitsLength;
 
+            // OPTIMIZATION: Dynamic batch size to prevent message flooding
+            // Target ~50 updates total
+            const batchSize = Math.max(10000, Math.ceil(needed / 50));
+
             for (let i = 0; i < needed; i++) {
+                // Report progress every batch
+                if (i % batchSize === 0) {
+                    const progress = Math.floor((i / needed) * 100);
+                    postMessage({ success: true, progress });
+                    // Yield to event loop only when sending message
+                    await new Promise(r => setTimeout(r, 0));
+                }
+
                 // LCG Step: Generate logical index in body space
                 const logicalBodyIndex = (start + i * step) % bodyValidCount;
 
@@ -133,6 +145,8 @@ self.onmessage = async (e: MessageEvent) => {
                 else pixels[targetIdx] &= ~1;
             }
 
+            // Final progress
+            postMessage({ success: true, progress: 100 });
             postMessage({ success: true, pixels: pixels.buffer }, { transfer: [pixels.buffer] });
         }
 
@@ -193,13 +207,24 @@ self.onmessage = async (e: MessageEvent) => {
 
             const bodyBits = new Uint8Array(dataBitLength);
 
+            // OPTIMIZATION: Dynamic batch size
+            const batchSize = Math.max(10000, Math.ceil(dataBitLength / 50));
+
             for (let i = 0; i < dataBitLength; i++) {
+                if (i % batchSize === 0) {
+                    const progress = Math.floor((i / dataBitLength) * 100);
+                    postMessage({ success: true, progress });
+                    await new Promise(r => setTimeout(r, 0));
+                }
+
                 const logicalBodyIndex = (start + i * step) % bodyValidCount;
                 const absoluteLogicalIndex = headerValidCount + logicalBodyIndex;
                 const targetIdx = getPhysicalIndex(absoluteLogicalIndex);
 
                 bodyBits[i] = pixels[targetIdx] & 1;
             }
+
+            postMessage({ success: true, progress: 100 });
 
             const encryptedBytes = new Uint8Array(dataBitLength / 8);
             for(let i=0; i<encryptedBytes.length; i++) {

@@ -28,6 +28,8 @@ const App: React.FC = () => {
         message, setMessage,
         decodedMessage, setDecodedMessage,
         isProcessing,
+        progress,
+        stage,
         notification,
         resultBlobUrl,
         resultSize,
@@ -54,16 +56,12 @@ const App: React.FC = () => {
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            if (!file.type.startsWith('image/')) {
-                notify('error', 'Please select a valid image file (PNG, JPG).');
-                return;
-            }
-            // Reset stego state when new file is picked
+            // Image validation happens inside useImageHandler now, but quick mime check helps
             resetStegoState();
             processFile(
                 file,
                 (img) => handleImageScan(img, mode),
-                () => notify('error', 'Failed to load image')
+                (msg) => notify('error', msg || 'Failed to load image')
             );
         }
         e.target.value = '';
@@ -74,13 +72,21 @@ const App: React.FC = () => {
         processFile(
             file,
             (img) => handleImageScan(img, mode),
-            () => notify('error', 'Failed to load image')
+            (msg) => notify('error', msg || 'Failed to load image')
         );
     };
 
     const currentBytes = getByteLength(message);
     const usagePercent = maxBytes > 0 ? Math.min((currentBytes / maxBytes) * 100, 100) : 0;
     const isOverLimit = currentBytes > maxBytes;
+
+    // Helper to determine button label
+    const getButtonLabel = () => {
+        if (!isProcessing) return null;
+        if (stage === 'analyzing') return 'Preparing...';
+        if (stage === 'rendering') return 'Finalizing...';
+        return `${progress}%`; // Stage is 'processing'
+    };
 
     return (
         <div className="min-h-screen w-full flex flex-col items-center py-8 px-4">
@@ -211,9 +217,26 @@ const App: React.FC = () => {
                                     ) : (
                                         <button onClick={() => processEncode(image)} disabled={isProcessing || !message || isOverLimit}
                                             aria-label="Encrypt and conceal message"
-                                            className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2
+                                            className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2 relative overflow-hidden
                                             ${(!message || isOverLimit) ? 'bg-surface-container text-secondary-container border border-secondary-container cursor-not-allowed' : 'bg-primary hover:bg-white text-on-primary shadow-primary/10'}`}>
-                                            {isProcessing ? <div className="w-6 h-6 border-4 border-on-primary/30 border-t-on-primary rounded-full animate-spin-slow" aria-label="Processing"></div> : <><IconEyeOff className="w-5 h-5"/> Conceal</>}
+
+                                            {isProcessing ? (
+                                                <div className="flex items-center gap-2 z-10 relative">
+                                                    <div className="w-5 h-5 border-4 border-on-primary/30 border-t-on-primary rounded-full animate-spin-slow" aria-label="Processing"></div>
+                                                    <span>{getButtonLabel()}</span>
+                                                </div>
+                                            ) : (
+                                                <><IconEyeOff className="w-5 h-5"/> Conceal</>
+                                            )}
+
+                                            {/* Progress Bar Background */}
+                                            {isProcessing && stage === 'processing' && (
+                                                <div className="absolute inset-0 bg-white/20 z-0 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }}></div>
+                                            )}
+                                            {/* Indeterminate Bar for Preparing/Finalizing */}
+                                            {isProcessing && stage !== 'processing' && (
+                                                <div className="absolute inset-0 bg-white/10 z-0 animate-pulse"></div>
+                                            )}
                                         </button>
                                     )}
                                 </>
@@ -241,9 +264,24 @@ const App: React.FC = () => {
                                     )}
                                     
                                     <button onClick={() => processDecode(image)} disabled={isProcessing || !hasSignature}
-                                        className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2
+                                        className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2 relative overflow-hidden
                                         ${isProcessing || !hasSignature ? 'bg-secondary-container text-outline cursor-not-allowed' : 'bg-secondary-container hover:bg-[#5c566b] text-white shadow-secondary-container/20'}`}>
-                                        {isProcessing ? <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin-slow"></div> : <><IconZap className="w-5 h-5"/> Reveal</>}
+
+                                        {isProcessing ? (
+                                            <div className="flex items-center gap-2 z-10 relative">
+                                                <div className="w-5 h-5 border-4 border-white/30 border-t-white rounded-full animate-spin-slow"></div>
+                                                <span>{getButtonLabel()}</span>
+                                            </div>
+                                        ) : (
+                                            <><IconZap className="w-5 h-5"/> Reveal</>
+                                        )}
+
+                                        {isProcessing && stage === 'processing' && (
+                                            <div className="absolute inset-0 bg-white/10 z-0 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }}></div>
+                                        )}
+                                        {isProcessing && stage !== 'processing' && (
+                                            <div className="absolute inset-0 bg-white/5 z-0 animate-pulse"></div>
+                                        )}
                                     </button>
                                 </>
                             )}

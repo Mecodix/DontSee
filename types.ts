@@ -31,6 +31,9 @@ export type SignatureType = 'locked' | 'unlocked' | null;
 
 export interface WorkerResponse {
     success: boolean;
+    // For progress updates
+    progress?: number;
+    // For final results
     pixels?: ArrayBuffer;
     text?: string;
     signature?: SignatureType;
