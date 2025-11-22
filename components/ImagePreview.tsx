@@ -1,4 +1,4 @@
-import React, { useState, DragEvent } from 'react';
+import React, { useState, DragEvent, KeyboardEvent, useRef } from 'react';
 import { IconUpload, IconX, IconCheck } from './Icons';
 import { AppImage } from '../types';
 
@@ -12,6 +12,7 @@ interface ImagePreviewProps {
 
 export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature, onReset, onFileSelect, onFileDrop }) => {
     const [isDragging, setIsDragging] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
         e.preventDefault();
@@ -38,6 +39,13 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
         }
     };
 
+    const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            fileInputRef.current?.click();
+        }
+    };
+
     return (
         <div 
             onDragOver={handleDragOver}
@@ -54,28 +62,45 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
                     <img src={image.src} className="w-full h-auto max-h-[500px] min-h-[300px] object-contain" alt="Preview" />
                     
                     <button onClick={onReset} 
+                        aria-label="Remove image"
                         className="absolute top-3 right-3 bg-surface-container/80 p-2 rounded-full text-white hover:text-error backdrop-blur-sm border border-secondary-container transition-transform hover:scale-110">
                         <IconX className="w-5 h-5" />
                     </button>
                     
                     {hasSignature && (
-                        <div className="absolute bottom-3 left-3 bg-on-primary border border-primary text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 animate-slide-up shadow-lg z-10">
+                        <div
+                            role="status"
+                            aria-live="polite"
+                            className="absolute bottom-3 left-3 bg-on-primary border border-primary text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 animate-slide-up shadow-lg z-10">
                             <IconCheck className="w-3 h-3" /> Signature Detected
                         </div>
                     )}
                 </div>
             ) : (
-                // FIX: Removed 'pointer-events-none' so clicks/taps register on the label
-                <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer">
+                // Accessibility Improvements: Focusable div + Keyboard handler
+                <div
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={handleKeyDown}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset rounded-3xl"
+                    aria-label="Upload an image"
+                >
                     <div className={`bg-secondary-container p-6 rounded-full mb-6 text-white transition-transform shadow-xl shadow-black/30 ${isDragging ? 'scale-125' : 'group-hover:scale-110'}`}>
                         <IconUpload className="w-10 h-10" />
                     </div>
                     <span className="text-white font-bold text-lg">{isDragging ? 'Drop it here!' : 'Tap or Drag to Upload'}</span>
                     <span className="text-outline text-sm mt-2">PNG or JPG</span>
                     
-                    {/* Input remains hidden, but because Label is clickable, this works now */}
-                    <input type="file" accept="image/*" onChange={onFileSelect} className="hidden" />
-                </label>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={onFileSelect}
+                        className="hidden"
+                        aria-hidden="true"
+                    />
+                </div>
             )}
         </div>
     );
