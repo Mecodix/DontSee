@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AppMode } from './types';
-import { IconBlinkingEye, IconDownload, IconEyeOff, IconHeart, IconLock, IconZap, IconChevronDown } from './components/Icons';
+import { IconBlinkingEye, IconDownload, IconEyeOff, IconHeart, IconLock, IconZap } from './components/Icons';
 import { Toast } from './components/Toast';
 import { ImagePreview } from './components/ImagePreview';
 import { getByteLength } from './utils/capacity';
@@ -19,7 +19,6 @@ const formatBytes = (bytes: number, decimals = 2) => {
 
 const App: React.FC = () => {
     const [mode, setMode] = useState<AppMode>(AppMode.HIDE);
-    const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
 
     const { image, processFile, resetImage } = useImageHandler();
 
@@ -46,47 +45,15 @@ const App: React.FC = () => {
     const reset = () => {
         resetImage();
         resetStegoState();
-    };
-
-    const toggleMode = (newMode: AppMode) => {
-        setMode(newMode);
-        reset();
+        setMode(AppMode.HIDE); // Reset to default mode
     };
 
     // Handle Auto-Switch Logic based on Scan
     const onImageLoaded = (img: HTMLImageElement) => {
         handleImageScan(img, mode);
-
-        // We need to wait slightly for the scan result to update state 'hasSignature',
-        // but handleImageScan is async and updates state internally.
-        // Ideally, we would pass a callback to handleImageScan, or check state.
-        // However, handleImageScan in the hook updates 'hasSignature' state.
-        // We can't synchronously know the result here.
-        // Let's modify handleImageScan in the hook to return a promise or accept a callback?
-        // Or simply rely on the user to see the notification.
-
-        // User Request: "Smart Unified Dropzone"
-        // Logic: If signature found -> Reveal Mode. Else -> Conceal Mode.
-        // Since the scan is async (worker), we need to hook into that flow.
-
-        // NOTE: We can't easily do this purely from App.tsx without modifying the hook to expose a callback.
-        // But wait, handleImageScan is inside the hook.
-        // Let's assume for now we let the hook do its thing, and we react to 'hasSignature' change?
-        // No, 'hasSignature' changes when we load a file.
-
-        // BETTER APPROACH: We will use a useEffect to watch `hasSignature`?
-        // No, that might trigger unwanted switches.
-
-        // Let's pass a custom callback to handleImageScan if possible, or just wait.
-        // Actually, the hook exposes `handleImageScan`. We can modify the hook to return the result?
-        // `scanImage` in service returns a Promise.
-
-        // Let's just rely on the hook's internal notification for now, OR
-        // we can implement a `useEffect` that switches mode when `hasSignature` becomes true *immediately after* a file load.
     };
 
-    // To implement "Smart Drop", we need to know when a file was just loaded.
-    // Let's use a useEffect on `hasSignature` combined with `image`.
+    // "Smart Drop" Logic: Auto-switch when signature state is determined
     React.useEffect(() => {
         if (image && hasSignature) {
             setMode(AppMode.SEE);
@@ -119,22 +86,130 @@ const App: React.FC = () => {
     };
 
     const handleReConceal = () => {
+        // Manually switch mode and clear signature state without re-scanning immediately
         setMode(AppMode.HIDE);
         resetStegoState();
-        // We keep the image, but treat it as fresh.
-        // Re-calculate capacity just in case
+        // We do NOT call handleImageScan here to avoid the loop.
+        // The user is now in "Conceal" mode with the same image, treated as raw.
+        // Capacity will be 0 until we recalc?
+        // Actually, we need capacity for the progress bar.
+        // We can manually calc capacity without checking signature:
         if (image) {
-             // handleImageScan(image.imgObject, AppMode.HIDE);
-             // Actually we just want to clear signature state which resetStegoState does.
-             // But we might want to recalc maxBytes? resetStegoState clears maxBytes too.
-             // We need to recalc capacity.
-             try {
-                 // Re-importing calculation logic or just calling scan again?
-                 // Calling scan again is safest to reset maxBytes
-                 handleImageScan(image.imgObject, AppMode.HIDE);
-             } catch(e) {}
+            // We can trigger a lightweight capacity calc or just let the user type.
+            // If we want capacity, we have to run the scan or expose a calc-only method.
+            // For now, re-running scan is the only way to get maxBytes via hook.
+            // To avoid the loop, we need the hook to NOT update hasSignature if we tell it not to?
+            // OR simpler: we just accept that for this session, hasSignature is cleared.
+            // We will call handleImageScan but we need to suppress the effect?
+            // The Effect depends on [hasSignature, image].
+            // If we resetStegoState(), hasSignature becomes false.
+            // Effect sees !hasSignature && image -> sets mode to HIDE.
+            // This is exactly what we want!
+
+            // So:
+            // 1. resetStegoState() -> hasSignature = false
+            // 2. Effect fires -> sets mode = HIDE
+            // 3. We need to calc capacity.
+            // We call handleImageScan. It runs async.
+            // It finds signature -> sets hasSignature = true.
+            // Effect fires -> sets mode = SEE. Loop!
+
+            // FIX: We need a way to ignore the signature result if we are in "Forced Conceal" mode.
+            // But 'mode' is state.
+            // Maybe we check if mode is ALREADY HIDE before switching to SEE?
+            // No, initial load starts at HIDE.
+
+            // Let's just NOT calculate capacity via handleImageScan?
+            // But then maxBytes is 0.
+
+            // Alternative: The worker scan returns the signature. We can ignore it in the hook?
+            // We can't change the hook easily without breaking other flows.
+
+            // HACK/FIX: In the Effect, we only switch to SEE if we are currently in HIDE *and* it's a fresh load?
+            // That's hard to track.
+
+            // REAL FIX: We need to calculate capacity without scanning for signature.
+            // The hook couples them.
+            // Let's just set maxBytes manually here? We have the util function!
+            try {
+                // Import logic dynamically or assume it's available?
+                // It's imported at top of file! 'calculateMaxBytes' is not exported from hook, but from utils!
+                // Ah, I need to import it in App.tsx. I did!
+                // So I can just setMaxBytes?
+                // The hook doesn't expose setMaxBytes.
+
+                // Okay, simpler: Just re-scan. If user wants to overwrite, they are essentially saying "Ignore the signature".
+                // But the code detects it.
+                // Let's just allow the loop? No.
+
+                // Let's modify the Effect to NOT switch if we just clicked Re-Conceal?
+                // We can add a ref `isReConcealing`.
+            } catch(e){}
         }
+        // Note: For this iteration, we will rely on the fact that if we don't scan, maxBytes is 0.
+        // This disables the input. That's bad.
+
+        // I will re-trigger scan but I will rely on the fact that I'm removing the Tabs means
+        // the Effect is the ONLY way to switch.
+        // If I want to stay in HIDE, I must ensure the effect doesn't fire or doesn't switch.
+        // I can add a state `ignoreSignature`?
+
+        // Since I cannot change the hook logic in this step easily (risk),
+        // I will simply NOT call scan, but I DO need capacity.
+        // I will add `setMaxBytes` to the return of `useSteganography` in the hook in a future step?
+        // Or I can just use the "Unified" UI as is.
+
+        // Wait, if I re-conceal, I am technically creating a NEW image.
+        // The current image has a signature.
+        // If I overwrite it, the new image will be valid.
+        // The issue is purely UI state.
+
+        // Let's just reload the image as if it was new, but use a flag?
+        // Actually, if I modify the hook to export `setMaxBytes`, I can just call it directly.
+        // But I can't modify hook in this step (only App.tsx).
+
+        // I will let the loop exist for now? No, user complained.
+        // I will simply NOT call scan. MaxBytes will be 0. Input disabled.
+        // That is broken.
+
+        // Okay, I'll trigger the scan, but I'll verify if I can prevent the switch.
+        // I will add a ref to App.tsx: `skipNextAutoSwitch`.
+
+        handleImageScan(image!.imgObject, AppMode.HIDE);
+        // The effect will trigger.
     };
+
+    // Attempting to fix loop with Ref:
+    const skipAutoSwitch = React.useRef(false);
+
+    const safeHandleReConceal = () => {
+        skipAutoSwitch.current = true;
+        setMode(AppMode.HIDE);
+        resetStegoState();
+        if (image) {
+            handleImageScan(image.imgObject, AppMode.HIDE);
+        }
+        // After scan (async), hasSignature becomes true.
+        // Effect fires.
+    };
+
+    React.useEffect(() => {
+        if (skipAutoSwitch.current) {
+            // Reset flag and do nothing?
+            // We want to ignore the switch to SEE.
+            if (hasSignature) {
+                 skipAutoSwitch.current = false;
+                 return;
+            }
+        }
+
+        if (image && hasSignature) {
+            setMode(AppMode.SEE);
+        } else if (image && !hasSignature) {
+            setMode(AppMode.HIDE);
+        }
+    }, [hasSignature, image]);
+
 
     const currentBytes = getByteLength(message);
     const usagePercent = maxBytes > 0 ? Math.min((currentBytes / maxBytes) * 100, 100) : 0;
@@ -146,6 +221,17 @@ const App: React.FC = () => {
         if (stage === 'rendering') return 'Finalizing...';
         return `${progress}%`;
     };
+
+    // Dynamic Header Text
+    const headerTitle = !image
+        ? "Hide or Reveal Secrets"
+        : (mode === AppMode.HIDE ? "Conceal Text" : "Reveal Secret");
+
+    const headerDesc = !image
+        ? "Upload a DontSee image to decrypt, or any image to hide a new message."
+        : (mode === AppMode.HIDE
+            ? "Encrypt your secrets using military-grade AES-GCM (Argon2id) and scattered LSB."
+            : "Locked message detected. Enter password to reconstruct the scattered data.");
 
     return (
         <div className="min-h-screen w-full flex flex-col items-center py-8 px-4">
@@ -162,47 +248,15 @@ const App: React.FC = () => {
 
             <main className="w-full max-w-5xl bg-surface-container border border-secondary-container rounded-[32px] overflow-hidden shadow-xl flex flex-col md:flex-row min-h-[550px]">
                 
-                <div className="md:w-1/3 bg-[#2b2930] p-8 flex flex-col border-b md:border-b-0 md:border-r border-secondary-container">
-                    <div className="bg-surface-container p-1 rounded-full flex border border-secondary-container relative mb-8">
-                        <div className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-secondary-container rounded-full transition-all duration-300 ease-out ${mode === AppMode.HIDE ? 'left-1' : 'translate-x-full left-1'}`}></div>
-                        <button
-                            onClick={() => toggleMode(AppMode.HIDE)}
-                            className={`flex-1 relative z-10 py-3 rounded-full text-sm font-bold flex justify-center items-center gap-2 transition-colors ${mode === AppMode.HIDE ? 'text-white' : 'text-outline'}`}
-                            aria-label="Switch to conceal mode"
-                        >
-                            <IconEyeOff className="w-4 h-4" /> Conceal
-                        </button>
-                        <button
-                            onClick={() => toggleMode(AppMode.SEE)}
-                            className={`flex-1 relative z-10 py-3 rounded-full text-sm font-bold flex justify-center items-center gap-2 transition-colors ${mode === AppMode.SEE ? 'text-white' : 'text-outline'}`}
-                            aria-label="Switch to reveal mode"
-                        >
-                            <IconBlinkingEye className="w-4 h-4" /> Reveal
-                        </button>
-                    </div>
-
-                    <div className="mt-4">
-                        <button 
-                            onClick={() => setIsDescriptionOpen(!isDescriptionOpen)}
-                            className="flex items-center gap-3 group text-left focus:outline-none w-full"
-                            aria-expanded={isDescriptionOpen}
-                            aria-label="Toggle description"
-                        >
-                            <h2 className="text-2xl font-bold text-white font-brand group-hover:text-primary transition-colors">
-                                {mode === AppMode.HIDE ? 'Encrypt & Conceal' : 'Decrypt & Reveal'}
-                            </h2>
-                            <IconChevronDown className={`w-5 h-5 text-outline transition-transform duration-300 ${isDescriptionOpen ? 'rotate-180' : ''}`} />
-                        </button>
-                        
-                        <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${isDescriptionOpen ? 'grid-rows-[1fr] opacity-100 mt-4' : 'grid-rows-[0fr] opacity-0 mt-0'}`}>
-                            <div className="overflow-hidden">
-                                <p className="text-white/70 text-sm leading-relaxed">
-                                    {mode === AppMode.HIDE 
-                                        ? "Encrypt your secrets using military-grade AES-GCM and scattered LSB. The message is exploded randomly across pixels using a unique salt, making it resistant to statistical analysis." 
-                                        : "Upload a DontSee image. The engine will detect the header signature and reconstruct the scattered data using your password."}
-                                </p>
-                            </div>
-                        </div>
+                <div className="md:w-1/3 bg-[#2b2930] p-8 flex flex-col border-b md:border-b-0 md:border-r border-secondary-container justify-center">
+                    {/* Unified Header: No Tabs */}
+                    <div className="flex flex-col gap-4">
+                        <h2 className="text-3xl font-bold text-white font-brand transition-all duration-300">
+                            {headerTitle}
+                        </h2>
+                        <p className="text-white/70 text-sm leading-relaxed">
+                            {headerDesc}
+                        </p>
                     </div>
                 </div>
 
@@ -341,9 +395,8 @@ const App: React.FC = () => {
                                         )}
                                     </button>
 
-                                    {/* Re-Conceal Option */}
                                     <div className="w-full text-center mt-4 animate-slide-up">
-                                        <button onClick={handleReConceal} className="text-sm text-outline hover:text-primary underline decoration-dotted transition-colors">
+                                        <button onClick={safeHandleReConceal} className="text-sm text-outline hover:text-primary underline decoration-dotted transition-colors">
                                             Want to use this image again? <strong>Re-Conceal</strong>
                                         </button>
                                     </div>
