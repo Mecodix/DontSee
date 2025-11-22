@@ -44,6 +44,22 @@ function countValidBytes(physicalIndex: number): number {
     return (3 * Math.floor(physicalIndex / 4)) + (physicalIndex % 4);
 }
 
+// Shared LCG / Scatter Logic
+function initLCG(salt: Uint8Array, bodyValidCount: number) {
+    const saltView = new DataView(salt.buffer);
+    let seed = saltView.getUint32(0, true);
+    const random = mulberry32(seed);
+
+    const start = Math.floor(random() * bodyValidCount);
+    let step = Math.floor(random() * bodyValidCount);
+    if (step === 0) step = 1;
+    while (gcd(step, bodyValidCount) !== 1) {
+        step = Math.floor(random() * bodyValidCount);
+        if (step === 0) step = 1;
+    }
+    return { start, step };
+}
+
 // Compression Helpers
 async function compress(text: string): Promise<Uint8Array> {
     const stream = new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"));
@@ -83,6 +99,8 @@ async function handleEncode(
     pixels: PixelArray,
     canvas: OffscreenCanvas | null,
     ctx: OffscreenCanvasRenderingContext2D | null,
+    width: number,
+    height: number,
     message: string,
     password?: string
 ) {
@@ -132,17 +150,7 @@ async function handleEncode(
     const totalValidCount = (pixels.length / 4) * 3;
     const bodyValidCount = totalValidCount - headerValidCount;
 
-    const saltView = new DataView(salt.buffer);
-    let seed = saltView.getUint32(0, true);
-    const random = mulberry32(seed);
-
-    const start = Math.floor(random() * bodyValidCount);
-    let step = Math.floor(random() * bodyValidCount);
-    if (step === 0) step = 1;
-    while (gcd(step, bodyValidCount) !== 1) {
-        step = Math.floor(random() * bodyValidCount);
-        if (step === 0) step = 1;
-    }
+    const { start, step } = initLCG(salt, bodyValidCount);
 
     const needed = dataBitsLength;
     let lastReportTime = performance.now();
@@ -181,21 +189,7 @@ async function handleEncode(
         postMessage({ success: true, blob });
     } else {
         // Legacy/Fallback Path: Return pixels
-        // Also return dimensions so main thread can reconstruct
-        const width = (canvas && canvas.width) || (pixels.length / 4); // Rough guess if no width, but should be passed
-        // Actually if we are in fallback path, we might not have canvas.width
-        // But 'pixels' comes from 'imageData' or 'imageBitmap'.
-        // If imageBitmap, we have canvas. If imageData, we just have buffer.
-        // We should probably pass width/height in the message if possible, but here we transfer buffer.
-        // The main thread knows the dimensions because it sent them or the original image.
-        // But to be safe, let's assume main thread tracks it.
-        // Wait, steganographyService needs to reconstruct it.
-        // We should send width/height if we can.
-
-        let w = 0, h = 0;
-        if (canvas) { w = canvas.width; h = canvas.height; }
-
-        postMessage({ success: true, pixels: pixels.buffer, width: w, height: h }, { transfer: [pixels.buffer] });
+        postMessage({ success: true, pixels: pixels.buffer, width, height }, { transfer: [pixels.buffer] });
     }
 }
 
@@ -236,18 +230,7 @@ async function handleDecode(pixels: PixelArray, password?: string) {
     const totalValidCount = (pixels.length / 4) * 3;
     const bodyValidCount = totalValidCount - headerValidCount;
 
-    const saltView = new DataView(salt.buffer);
-    let seed = saltView.getUint32(0, true);
-    const random = mulberry32(seed);
-
-    const start = Math.floor(random() * bodyValidCount);
-    let step = Math.floor(random() * bodyValidCount);
-    if (step === 0) step = 1;
-
-    while (gcd(step, bodyValidCount) !== 1) {
-        step = Math.floor(random() * bodyValidCount);
-        if (step === 0) step = 1;
-    }
+    const { start, step } = initLCG(salt, bodyValidCount);
 
     const bodyBits = new Uint8Array(dataBitLength);
     let lastReportTime = performance.now();
@@ -321,22 +304,45 @@ self.onmessage = async (e: MessageEvent) => {
         let pixels: Uint8ClampedArray;
         let canvas: OffscreenCanvas | null = null;
         let ctx: OffscreenCanvasRenderingContext2D | null = null;
+        let width = 0;
+        let height = 0;
 
         if (imageBitmap) {
-            canvas = new OffscreenCanvas(imageBitmap.width, imageBitmap.height);
-            ctx = canvas.getContext('2d', { willReadFrequently: true });
-            if (!ctx) throw new Error("OffscreenCanvas unavailable");
+            // We prefer OffscreenCanvas if available
+            width = imageBitmap.width;
+            height = imageBitmap.height;
 
-            ctx.drawImage(imageBitmap, 0, 0);
-            pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            try {
+                canvas = new OffscreenCanvas(width, height);
+                ctx = canvas.getContext('2d', { willReadFrequently: true });
+                if (ctx) {
+                    ctx.drawImage(imageBitmap, 0, 0);
+                    pixels = ctx.getImageData(0, 0, width, height).data;
+                } else {
+                     throw new Error("Context creation failed");
+                }
+            } catch (e) {
+                // Fallback if OffscreenCanvas fails but we have imageBitmap
+                // We can't easily read pixels from ImageBitmap without a canvas (even on main thread).
+                // So if OffscreenCanvas fails in worker, we are kinda stuck unless we assume
+                // the browser supports ImageBitmap but NOT OffscreenCanvas (rare edge case).
+                // But if we caught an error, let's throw, because 'pixels' isn't set.
+                 throw new Error("OffscreenCanvas failed and no fallback pixel source.");
+            }
         } else if (imageData) {
             pixels = new Uint8ClampedArray(imageData);
+            // If using raw buffer, we might not know width/height unless encoded in buffer or passed.
+            // But 'encode' needs it only for fallback.
+            // 'decode'/'scan' don't strictly need width/height for bit extraction if they just iterate pixels.
+            // But let's assume simple buffer usage is legacy or for scan (small buffer).
+            width = 0;
+            height = 0;
         } else {
             throw new Error("No image data provided");
         }
 
         if (type === 'encode') {
-            await handleEncode(pixels, canvas, ctx, message, password);
+            await handleEncode(pixels, canvas, ctx, width, height, message, password);
         } else if (type === 'decode') {
             await handleDecode(pixels, password);
         } else if (type === 'scan') {
