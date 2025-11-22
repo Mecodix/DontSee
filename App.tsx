@@ -43,6 +43,13 @@ const App: React.FC = () => {
         };
     }, [resultBlobUrl]);
 
+    // Cleanup Worker on unmount
+    useEffect(() => {
+        return () => {
+            steganographyService.terminate();
+        };
+    }, []);
+
     // Cleanup Image Preview URL (Blob)
     useEffect(() => {
         return () => {
@@ -51,6 +58,13 @@ const App: React.FC = () => {
             }
         };
     }, [image]);
+
+    // Clear result when inputs change to prevent stale downloads
+    useEffect(() => {
+        if (resultBlobUrl) {
+            setResultBlobUrl(null);
+        }
+    }, [message, password]);
 
     const processFile = (file: File) => {
         const objectUrl = URL.createObjectURL(file);
@@ -121,7 +135,13 @@ const App: React.FC = () => {
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) processFile(file);
+        if (file) {
+            if (!file.type.startsWith('image/')) {
+                notify('error', 'Please select a valid image file (PNG, JPG).');
+                return;
+            }
+            processFile(file);
+        }
         e.target.value = '';
     };
 
