@@ -328,7 +328,7 @@ const App: React.FC = () => {
                                         </button>
 
                                         <div className="w-full text-center mt-4 animate-slide-up">
-                                            <button onClick={handleReConceal} className="text-sm text-outline hover:text-primary hover:underline decoration-dotted transition-colors">
+                                            <button onClick={handleReConceal} className="text-sm text-outline hover:text-primary transition-colors">
                                                 Want to use this image again? <strong>Re-Conceal</strong>
                                             </button>
                                         </div>
