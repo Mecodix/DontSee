@@ -8,6 +8,7 @@ import { RevealView } from './components/RevealView';
 import { calculateMaxBytes, getByteLength } from './utils/capacity';
 import { useImageHandler } from './hooks/useImageHandler';
 import { useSteganography } from './hooks/useSteganography';
+import { usePasteHandler } from './hooks/usePasteHandler';
 
 // Helper to format bytes
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -26,7 +27,7 @@ const App: React.FC = () => {
     // New state for browser decoding phase
     const [isReading, setIsReading] = useState(false);
 
-    const { image, processFile, resetImage, usePasteHandler } = useImageHandler();
+    const { image, processFile, resetImage } = useImageHandler();
 
     const {
         password, setPassword,

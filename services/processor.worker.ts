@@ -4,11 +4,20 @@ import { argon2id } from 'hash-wasm';
 const SIG_UNLOCKED = "0100010001010011"; // "DS"
 const SIG_LOCKED = "0100010001001100";   // "DL"
 
+// NEW: Raw/Uncompressed Signatures
+const SIG_UNLOCKED_RAW = "0100010001010101"; // "DU" (DontSee Uncompressed)
+const SIG_LOCKED_RAW = "0100010001001011";   // "DK" (DontSee Key-Uncompressed)
+
 // Internal Constant for "Empty Password"
 const EMPTY_PASSWORD_SENTINEL = "___DONTSEE_EMPTY_PASSWORD_SENTINEL_V1___";
 
 // Types
 type PixelArray = Uint8ClampedArray;
+
+// Feature Detection
+function supportsCompression() {
+    return typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
+}
 
 // PRNG (Mulberry32)
 function mulberry32(a: number) {
@@ -106,7 +115,17 @@ async function handleEncode(
     password?: string
 ) {
     const hasPassword = password && password.length > 0;
-    const signature = hasPassword ? SIG_LOCKED : SIG_UNLOCKED;
+
+    // Feature Check: Compression
+    const canCompress = supportsCompression();
+
+    // Determine Signature based on Password + Compression Support
+    let signature;
+    if (hasPassword) {
+        signature = canCompress ? SIG_LOCKED : SIG_LOCKED_RAW;
+    } else {
+        signature = canCompress ? SIG_UNLOCKED : SIG_UNLOCKED_RAW;
+    }
 
     // Crypto Setup
     const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -115,10 +134,15 @@ async function handleEncode(
     // Derive Key using Argon2id
     const key = await deriveKey(password || "", salt);
 
-    // Compress before encrypting
-    const compressedMsg = await compress(message);
+    // Compress OR Convert Raw
+    let dataPayload: Uint8Array;
+    if (canCompress) {
+        dataPayload = await compress(message);
+    } else {
+        dataPayload = new TextEncoder().encode(message);
+    }
 
-    const encryptedBuffer = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, compressedMsg);
+    const encryptedBuffer = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, dataPayload);
     const encryptedBytes = new Uint8Array(encryptedBuffer);
 
     // Header Construction
@@ -208,7 +232,11 @@ async function handleDecode(id: string, pixels: PixelArray, password?: string) {
 
     // Extract Header
     const sig = readBits(16);
-    if (sig !== SIG_UNLOCKED && sig !== SIG_LOCKED) {
+
+    const isCompressed = (sig === SIG_UNLOCKED || sig === SIG_LOCKED);
+    const isRaw = (sig === SIG_UNLOCKED_RAW || sig === SIG_LOCKED_RAW);
+
+    if (!isCompressed && !isRaw) {
         throw new Error("No DontSee signature found");
     }
 
@@ -270,13 +298,24 @@ async function handleDecode(id: string, pixels: PixelArray, password?: string) {
         const key = await deriveKey(password || "", salt);
 
         const decryptedBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, encryptedBytes);
-
         const decryptedBytes = new Uint8Array(decryptedBuf);
-        const text = await decompress(decryptedBytes);
+
+        let text: string;
+        if (isCompressed) {
+            // If signature says compressed, we MUST decompress
+            if (!supportsCompression()) {
+                throw new Error("Message is compressed but browser doesn't support decompression.");
+            }
+            text = await decompress(decryptedBytes);
+        } else {
+            // Signature says Raw
+            text = new TextDecoder().decode(decryptedBytes);
+        }
 
         postMessage({ id, success: true, text });
     } catch(e) {
-        postMessage({ id, success: false, error: "Decryption failed" });
+        const msg = e instanceof Error ? e.message : "Decryption failed";
+        postMessage({ id, success: false, error: msg === "Decryption failed" ? "Decryption failed" : msg });
     }
 }
 
@@ -291,8 +330,8 @@ function handleScan(id: string, pixels: PixelArray) {
     }
 
     let result = null;
-    if (sig === SIG_LOCKED) result = 'locked';
-    else if (sig === SIG_UNLOCKED) result = 'unlocked';
+    if (sig === SIG_LOCKED || sig === SIG_LOCKED_RAW) result = 'locked';
+    else if (sig === SIG_UNLOCKED || sig === SIG_UNLOCKED_RAW) result = 'unlocked';
 
     postMessage({ id, success: true, signature: result });
 }
