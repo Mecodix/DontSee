@@ -56,11 +56,6 @@ const App: React.FC = () => {
     const onImageLoaded = async (img: HTMLImageElement) => {
         setIsScanning(true);
         try {
-            // We use await to ensure scan completes before we potentially show UI
-            // handleImageScan is now async-ish in behavior (returns promise of void but completes when done)
-            // Since handleImageScan in hook returns void, we wrap it or modify hook.
-            // For now, we rely on the hook's internal logic and simply wait a bit or rely on `hasSignature` change.
-            // BETTER: Modify hook to return Promise.
             await handleImageScan(img, mode);
         } finally {
              setIsScanning(false);
@@ -68,9 +63,6 @@ const App: React.FC = () => {
     };
 
     // "Smart Drop" Logic: Auto-switch when signature state is determined
-    // We only auto-switch if we are NOT in a manual override state.
-    // But checking 'isScanning' prevents premature switching?
-    // Actually, the Effect fires when hasSignature changes.
     React.useEffect(() => {
         if (image && hasSignature && !isScanning) {
             setMode(AppMode.SEE);
@@ -111,13 +103,8 @@ const App: React.FC = () => {
     };
 
     const handleReConceal = () => {
-        // 1. Reset to Hide Mode
         setMode(AppMode.HIDE);
-
-        // 2. Clear Stego State (removes signature, message, etc.)
         resetStegoState();
-
-        // 3. Manually set capacity (skipping scan to avoid loop and notifications)
         if (image) {
             try {
                 const cap = calculateMaxBytes(image.imgObject.width, image.imgObject.height);
@@ -126,10 +113,6 @@ const App: React.FC = () => {
                 console.error("Capacity calc error", e);
             }
         }
-        // We do NOT call handleImageScan here.
-        // Thus `hasSignature` remains false.
-        // The Effect sees (!hasSignature && image) -> Sets HIDE (which we are already in).
-        // Perfect.
     };
 
     const currentBytes = getByteLength(message);
@@ -148,13 +131,16 @@ const App: React.FC = () => {
         ? "Hide or Reveal Secrets"
         : (isScanning ? "Analyzing Image..." : (mode === AppMode.HIDE ? "Conceal Text" : "Reveal Secret"));
 
+    // Updated Description Logic to prioritize Steganography and fix inconsistencies
     const headerDesc = !image
         ? "Upload a DontSee image to decrypt, or any image to hide a new message."
         : (isScanning
             ? "Please wait while we check for hidden messages..."
             : (mode === AppMode.HIDE
-                ? "Encrypt your secrets using military-grade AES-GCM (Argon2id) and scattered LSB."
-                : "Locked message detected. Enter password to reconstruct the scattered data."));
+                ? "Hide text inside images using steganography. Optionally add a password for AES-GCM encryption."
+                : (requiresPassword
+                    ? "Locked message detected. Enter password to reconstruct the scattered data."
+                    : "Hidden message found. Click Reveal to read the secret.")));
 
     return (
         <div className="min-h-screen w-full flex flex-col items-center py-8 px-4">
