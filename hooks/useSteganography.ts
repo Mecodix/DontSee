@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { steganographyService } from '../services/steganographyService';
 import { calculateMaxBytes, getByteLength } from '../utils/capacity';
 import { NotificationState, AppImage, AppMode } from '../types';
@@ -6,6 +6,9 @@ import { NotificationState, AppImage, AppMode } from '../types';
 export type ProcessingStage = 'idle' | 'analyzing' | 'processing' | 'rendering';
 
 export const useSteganography = () => {
+    // Track the current scan operation to prevent race conditions
+    const currentScanId = useRef(0);
+
     const [password, setPassword] = useState('');
     const [message, setMessage] = useState('');
     const [decodedMessage, setDecodedMessage] = useState('');
@@ -51,6 +54,9 @@ export const useSteganography = () => {
     }, [message, password]);
 
     const resetStegoState = () => {
+        // Invalidate any pending scans
+        currentScanId.current++;
+
         setResultBlobUrl(null);
         setDecodedMessage('');
         setHasSignature(false);
@@ -63,7 +69,10 @@ export const useSteganography = () => {
     };
 
     const handleImageScan = async (img: HTMLImageElement, mode: AppMode) => {
+        // Start a new scan ID
+        const scanId = ++currentScanId.current;
         setIsScanning(true);
+
         try {
             const capacity = calculateMaxBytes(img.width, img.height);
             setMaxBytes(capacity);
@@ -98,15 +107,20 @@ export const useSteganography = () => {
 
             const [sigType] = await Promise.all([scanPromise, minDelay]);
 
-            if (sigType) {
-                setHasSignature(true);
-                setRequiresPassword(sigType === 'locked');
+            // Only update state if this is still the most recent scan
+            if (scanId === currentScanId.current) {
+                if (sigType) {
+                    setHasSignature(true);
+                    setRequiresPassword(sigType === 'locked');
+                }
             }
         } catch (error) {
             console.error("Scan error", error);
             notify('error', 'Failed to scan image for signatures.');
         } finally {
-            setIsScanning(false);
+            if (scanId === currentScanId.current) {
+                setIsScanning(false);
+            }
         }
     };
 

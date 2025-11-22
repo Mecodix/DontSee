@@ -28,7 +28,12 @@ class SteganographyService {
         return new Promise((resolve, reject) => {
             if (!this.worker) return reject('Worker not initialized');
 
-            const handler = (e: MessageEvent) => {
+            const cleanup = () => {
+                this.worker?.removeEventListener('message', messageHandler);
+                this.worker?.removeEventListener('error', errorHandler);
+            };
+
+            const messageHandler = (e: MessageEvent) => {
                 const data = e.data as WorkerResponse;
 
                 if (data.progress !== undefined) {
@@ -36,11 +41,17 @@ class SteganographyService {
                     return;
                 }
 
-                this.worker?.removeEventListener('message', handler);
+                cleanup();
                 resolve(data);
             };
 
-            this.worker.addEventListener('message', handler);
+            const errorHandler = (e: ErrorEvent) => {
+                cleanup();
+                reject(new Error(`Worker error: ${e.message}`));
+            };
+
+            this.worker.addEventListener('message', messageHandler);
+            this.worker.addEventListener('error', errorHandler);
             this.worker.postMessage(message, transferrables);
         });
     }
