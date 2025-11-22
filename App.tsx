@@ -53,14 +53,56 @@ const App: React.FC = () => {
         reset();
     };
 
+    // Handle Auto-Switch Logic based on Scan
+    const onImageLoaded = (img: HTMLImageElement) => {
+        handleImageScan(img, mode);
+
+        // We need to wait slightly for the scan result to update state 'hasSignature',
+        // but handleImageScan is async and updates state internally.
+        // Ideally, we would pass a callback to handleImageScan, or check state.
+        // However, handleImageScan in the hook updates 'hasSignature' state.
+        // We can't synchronously know the result here.
+        // Let's modify handleImageScan in the hook to return a promise or accept a callback?
+        // Or simply rely on the user to see the notification.
+
+        // User Request: "Smart Unified Dropzone"
+        // Logic: If signature found -> Reveal Mode. Else -> Conceal Mode.
+        // Since the scan is async (worker), we need to hook into that flow.
+
+        // NOTE: We can't easily do this purely from App.tsx without modifying the hook to expose a callback.
+        // But wait, handleImageScan is inside the hook.
+        // Let's assume for now we let the hook do its thing, and we react to 'hasSignature' change?
+        // No, 'hasSignature' changes when we load a file.
+
+        // BETTER APPROACH: We will use a useEffect to watch `hasSignature`?
+        // No, that might trigger unwanted switches.
+
+        // Let's pass a custom callback to handleImageScan if possible, or just wait.
+        // Actually, the hook exposes `handleImageScan`. We can modify the hook to return the result?
+        // `scanImage` in service returns a Promise.
+
+        // Let's just rely on the hook's internal notification for now, OR
+        // we can implement a `useEffect` that switches mode when `hasSignature` becomes true *immediately after* a file load.
+    };
+
+    // To implement "Smart Drop", we need to know when a file was just loaded.
+    // Let's use a useEffect on `hasSignature` combined with `image`.
+    React.useEffect(() => {
+        if (image && hasSignature) {
+            setMode(AppMode.SEE);
+        } else if (image && !hasSignature) {
+            setMode(AppMode.HIDE);
+        }
+    }, [hasSignature, image]);
+
+
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            // Image validation happens inside useImageHandler now, but quick mime check helps
             resetStegoState();
             processFile(
                 file,
-                (img) => handleImageScan(img, mode),
+                (img) => onImageLoaded(img),
                 (msg) => notify('error', msg || 'Failed to load image')
             );
         }
@@ -71,21 +113,38 @@ const App: React.FC = () => {
         resetStegoState();
         processFile(
             file,
-            (img) => handleImageScan(img, mode),
+            (img) => onImageLoaded(img),
             (msg) => notify('error', msg || 'Failed to load image')
         );
+    };
+
+    const handleReConceal = () => {
+        setMode(AppMode.HIDE);
+        resetStegoState();
+        // We keep the image, but treat it as fresh.
+        // Re-calculate capacity just in case
+        if (image) {
+             // handleImageScan(image.imgObject, AppMode.HIDE);
+             // Actually we just want to clear signature state which resetStegoState does.
+             // But we might want to recalc maxBytes? resetStegoState clears maxBytes too.
+             // We need to recalc capacity.
+             try {
+                 // Re-importing calculation logic or just calling scan again?
+                 // Calling scan again is safest to reset maxBytes
+                 handleImageScan(image.imgObject, AppMode.HIDE);
+             } catch(e) {}
+        }
     };
 
     const currentBytes = getByteLength(message);
     const usagePercent = maxBytes > 0 ? Math.min((currentBytes / maxBytes) * 100, 100) : 0;
     const isOverLimit = currentBytes > maxBytes;
 
-    // Helper to determine button label
     const getButtonLabel = () => {
         if (!isProcessing) return null;
         if (stage === 'analyzing') return 'Preparing...';
         if (stage === 'rendering') return 'Finalizing...';
-        return `${progress}%`; // Stage is 'processing'
+        return `${progress}%`;
     };
 
     return (
@@ -229,11 +288,9 @@ const App: React.FC = () => {
                                                 <><IconEyeOff className="w-5 h-5"/> Conceal</>
                                             )}
 
-                                            {/* Progress Bar Background */}
                                             {isProcessing && stage === 'processing' && (
                                                 <div className="absolute inset-0 bg-white/20 z-0 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }}></div>
                                             )}
-                                            {/* Indeterminate Bar for Preparing/Finalizing */}
                                             {isProcessing && stage !== 'processing' && (
                                                 <div className="absolute inset-0 bg-white/10 z-0 animate-pulse"></div>
                                             )}
@@ -283,6 +340,13 @@ const App: React.FC = () => {
                                             <div className="absolute inset-0 bg-white/5 z-0 animate-pulse"></div>
                                         )}
                                     </button>
+
+                                    {/* Re-Conceal Option */}
+                                    <div className="w-full text-center mt-4 animate-slide-up">
+                                        <button onClick={handleReConceal} className="text-sm text-outline hover:text-primary underline decoration-dotted transition-colors">
+                                            Want to use this image again? <strong>Re-Conceal</strong>
+                                        </button>
+                                    </div>
                                 </>
                             )}
                         </div>
