@@ -70,6 +70,7 @@ export const useSteganography = () => {
 
         setTimeout(async () => {
             try {
+                // Scan still uses main thread canvas for small data reads (fast)
                 const canvas = document.createElement('canvas');
                 canvas.width = img.width;
                 canvas.height = img.height;
@@ -78,6 +79,11 @@ export const useSteganography = () => {
                     ctx.drawImage(img, 0, 0);
                     const imageData = ctx.getImageData(0, 0, img.width, img.height);
 
+                    // Optimization: Only send first few KB for scan?
+                    // Current implementation sends whole buffer copy.
+                    // For scan, we only check first few bytes.
+                    // But scanImage contract expects full buffer.
+                    // We can keep this as is or optimize later.
                     const bufferCopy = imageData.data.buffer.slice(0);
                     const sigType = await steganographyService.scanImage(bufferCopy);
 
@@ -101,53 +107,43 @@ export const useSteganography = () => {
     const processEncode = (image: AppImage) => {
         if (!message) return notify('error', 'Please provide a message.');
         const currentBytes = getByteLength(message);
+        // Note: Compression happens in worker, so this check is conservative/safe.
         if (currentBytes > maxBytes) return notify('error', `Message is too long! Limit is ${maxBytes} bytes`);
 
         setIsProcessing(true);
         setProgress(0);
-        setStage('analyzing'); // Step 1: Reading Image Data
+        setStage('analyzing'); // Generating Bitmap
 
         setTimeout(async () => {
             try {
-                const canvas = document.createElement('canvas');
-                canvas.width = image.width;
-                canvas.height = image.height;
-                const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                if (!ctx) throw new Error("Canvas context unavailable");
+                // OffscreenCanvas Optimization: Create ImageBitmap to transfer
+                // We create it from the imgObject which is already loaded
+                const bitmap = await createImageBitmap(image.imgObject);
 
-                ctx.drawImage(image.imgObject, 0, 0);
-                const imgData = ctx.getImageData(0, 0, image.width, image.height);
+                setStage('processing'); // Worker Processing
 
-                setStage('processing'); // Step 2: Worker Processing
-
-                const newPixelBuffer = await steganographyService.encode(
-                    imgData.data.buffer,
+                // Encode returns a Blob directly now!
+                const resultBlob = await steganographyService.encode(
+                    bitmap,
                     message,
                     password,
-                    (p) => setProgress(old => Math.max(old, p)) // Safety: Ensure progress only increases
+                    (p) => setProgress(old => Math.max(old, p))
                 );
 
-                setStage('rendering'); // Step 3: Creating Blob
+                setStage('rendering'); // Finalizing
 
-                const newImgData = new ImageData(new Uint8ClampedArray(newPixelBuffer), image.width, image.height);
-                ctx.putImageData(newImgData, 0, 0);
+                // Artificial delay removed/reduced because we already have the blob
+                // But keeping small delay for UX smoothness if needed, or just done.
+                // await new Promise(r => setTimeout(r, 100));
 
-                // Artificial delay to let user see 'Finalizing' if fast
-                await new Promise(r => setTimeout(r, 100));
+                const url = URL.createObjectURL(resultBlob);
+                setResultBlobUrl(url);
+                setResultSize(resultBlob.size);
+                notify('success', 'Encryption complete!');
 
-                canvas.toBlob((blob) => {
-                    if (blob) {
-                        const url = URL.createObjectURL(blob);
-                        setResultBlobUrl(url);
-                        setResultSize(blob.size);
-                        notify('success', 'Encryption complete!');
-                    } else {
-                        notify('error', 'Failed to generate image');
-                    }
-                    setIsProcessing(false);
-                    setProgress(0);
-                    setStage('idle');
-                }, 'image/png');
+                setIsProcessing(false);
+                setProgress(0);
+                setStage('idle');
 
             } catch (err: any) {
                 notify('error', err.message || 'Encoding failed');
@@ -165,25 +161,15 @@ export const useSteganography = () => {
 
         setTimeout(async () => {
             try {
-                const canvas = document.createElement('canvas');
-                canvas.width = image.width;
-                canvas.height = image.height;
-                const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                if (!ctx) throw new Error("Canvas context unavailable");
-
-                ctx.drawImage(image.imgObject, 0, 0);
-                const imgData = ctx.getImageData(0, 0, image.width, image.height);
+                const bitmap = await createImageBitmap(image.imgObject);
 
                 setStage('processing');
 
                 const text = await steganographyService.decode(
-                    imgData.data.buffer,
+                    bitmap,
                     password,
-                    (p) => setProgress(old => Math.max(old, p)) // Safety
+                    (p) => setProgress(old => Math.max(old, p))
                 );
-
-                // Artificial delay to smooth out transition
-                await new Promise(r => setTimeout(r, 100));
 
                 setDecodedMessage(text);
                 notify('success', 'Message decrypted!');
@@ -204,7 +190,7 @@ export const useSteganography = () => {
         decodedMessage, setDecodedMessage,
         isProcessing,
         progress,
-        stage, // New state
+        stage,
         notification,
         resultBlobUrl,
         resultSize,

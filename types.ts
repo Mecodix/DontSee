@@ -22,7 +22,10 @@ export type WorkerRequestType = 'encode' | 'decode' | 'scan';
 
 export interface WorkerRequest {
     type: WorkerRequestType;
-    imageData: ArrayBuffer; // Transferable
+    // NEW: Support ImageBitmap for OffscreenCanvas
+    imageBitmap?: ImageBitmap;
+    // Legacy support for scan (ArrayBuffer is faster for small reads) or fallback
+    imageData?: ArrayBuffer;
     password?: string;
     message?: string;
 }
@@ -31,10 +34,10 @@ export type SignatureType = 'locked' | 'unlocked' | null;
 
 export interface WorkerResponse {
     success: boolean;
-    // For progress updates
     progress?: number;
-    // For final results
-    pixels?: ArrayBuffer;
+    // NEW: Return Blob directly from worker
+    blob?: Blob;
+    pixels?: ArrayBuffer; // Legacy/Fallback
     text?: string;
     signature?: SignatureType;
     error?: string;
