@@ -1,16 +1,17 @@
 import React, { useState, DragEvent, KeyboardEvent, useRef } from 'react';
-import { IconUpload, IconX, IconCheck } from './Icons';
+import { IconUpload, IconX, IconLock, IconUnlock } from './Icons';
 import { AppImage } from '../types';
 
 interface ImagePreviewProps {
     image: AppImage | null;
     hasSignature: boolean;
+    requiresPassword?: boolean;
     onReset: () => void;
     onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onFileDrop: (file: File) => void;
 }
 
-export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature, onReset, onFileSelect, onFileDrop }) => {
+export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature, requiresPassword, onReset, onFileSelect, onFileDrop }) => {
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -73,8 +74,16 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
                         <div
                             role="status"
                             aria-live="polite"
-                            className="absolute bottom-3 left-3 bg-on-primary border border-primary text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 animate-slide-up shadow-lg z-10">
-                            <IconCheck className="w-3 h-3" /> Signature Detected
+                            className={`absolute bottom-3 left-3 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 animate-slide-up shadow-lg z-10 border backdrop-blur-md
+                            ${requiresPassword
+                                ? 'bg-primary/90 text-on-primary border-primary-container'
+                                : 'bg-secondary-container/90 text-white border-white/20'}`}
+                        >
+                            {requiresPassword ? (
+                                <><IconLock className="w-3.5 h-3.5" /> Locked Message</>
+                            ) : (
+                                <><IconUnlock className="w-3.5 h-3.5" /> Open Message</>
+                            )}
                         </div>
                     )}
                 </div>

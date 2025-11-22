@@ -4,6 +4,13 @@ import { argon2id } from 'hash-wasm';
 const SIG_UNLOCKED = "0100010001010011"; // "DS"
 const SIG_LOCKED = "0100010001001100";   // "DL"
 
+// Internal Constant for "Empty Password"
+// This is used because hash-wasm requires a non-empty string/buffer.
+// We use a unique string that is unlikely to be chosen by a user.
+// Note: This means if a user literally types this string, it's equivalent to empty.
+// But for a steganography app, this is an acceptable trade-off for "Optional" password support.
+const EMPTY_PASSWORD_SENTINEL = "___DONTSEE_EMPTY_PASSWORD_SENTINEL_V1___";
+
 // PRNG (Mulberry32)
 function mulberry32(a: number) {
     return function() {
@@ -51,11 +58,11 @@ async function decompress(data: Uint8Array): Promise<string> {
 
 // Crypto Helper (Argon2id)
 async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
-    // PERFORMANCE FIX: Only call argon2id ONCE.
-    // hash-wasm's argon2id returns a Uint8Array if outputType is 'binary'.
+    // hash-wasm requires non-empty password.
+    const effectivePassword = (!password || password.length === 0) ? EMPTY_PASSWORD_SENTINEL : password;
 
     const rawKey = await argon2id({
-        password: password,
+        password: effectivePassword,
         salt: salt,
         parallelism: 1,
         iterations: 16, // Security/Performance tradeoff for web

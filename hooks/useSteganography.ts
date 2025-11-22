@@ -21,9 +21,12 @@ export const useSteganography = () => {
     const [requiresPassword, setRequiresPassword] = useState(false);
     const [maxBytes, setMaxBytes] = useState(0);
 
+    // Expose scanning state to help App avoid flickering
+    const [isScanning, setIsScanning] = useState(false);
+
     const notify = (type: 'success' | 'error', msg: string) => {
         setNotification({ type, msg });
-        setTimeout(() => setNotification(null), 4000);
+        setTimeout(() => setNotification(null), 3000); // Reduced to 3s (will reduce more in Toast)
     };
 
     // Cleanup Result URL
@@ -59,7 +62,8 @@ export const useSteganography = () => {
         setStage('idle');
     };
 
-    const handleImageScan = (img: HTMLImageElement, mode: AppMode) => {
+    const handleImageScan = async (img: HTMLImageElement, mode: AppMode) => {
+        setIsScanning(true);
         try {
             const capacity = calculateMaxBytes(img.width, img.height);
             setMaxBytes(capacity);
@@ -68,61 +72,61 @@ export const useSteganography = () => {
             setMaxBytes(0);
         }
 
-        setTimeout(async () => {
-            try {
-                // Scan still uses main thread canvas for small data reads (fast)
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                if (ctx) {
-                    ctx.drawImage(img, 0, 0);
-                    const imageData = ctx.getImageData(0, 0, img.width, img.height);
+        // We use a Promise wrapper for the async scan part to ensure awaitability
+        await new Promise<void>(resolve => {
+            setTimeout(async () => {
+                try {
+                    // Scan still uses main thread canvas for small data reads (fast)
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    if (ctx) {
+                        ctx.drawImage(img, 0, 0);
+                        const imageData = ctx.getImageData(0, 0, img.width, img.height);
 
-                    // Optimization: Only send first few KB for scan?
-                    // Current implementation sends whole buffer copy.
-                    // For scan, we only check first few bytes.
-                    // But scanImage contract expects full buffer.
-                    // We can keep this as is or optimize later.
-                    const bufferCopy = imageData.data.buffer.slice(0);
-                    const sigType = await steganographyService.scanImage(bufferCopy);
+                        const bufferCopy = imageData.data.buffer.slice(0);
+                        const sigType = await steganographyService.scanImage(bufferCopy);
 
-                    if (sigType) {
-                        setHasSignature(true);
-                        setRequiresPassword(sigType === 'locked');
-                        notify('success', sigType === 'locked' ? 'Locked message detected!' : 'Open message detected!');
-                    } else {
-                        if (mode === AppMode.SEE) {
-                            notify('error', 'No hidden message found in this image.');
+                        if (sigType) {
+                            setHasSignature(true);
+                            setRequiresPassword(sigType === 'locked');
+                            // User Request: Remove notifications for detection
+                            // notify('success', sigType === 'locked' ? 'Locked message detected!' : 'Open message detected!');
+                        } else {
+                            // Only notify if explicitly looking for secrets (Mode SEE),
+                            // but since we auto-switch, we might suppress this too.
+                            // If user explicitly switched to Reveal, they might want to know.
+                            // But here we are just scanning on load.
+                            // If mode was already SEE (from previous image?), and we load a new one without signature...
+                            // Let's suppress this error during scan to be cleaner.
                         }
                     }
+                } catch (error) {
+                    console.error("Scan error", error);
+                    notify('error', 'Failed to scan image for signatures.');
+                } finally {
+                    resolve();
                 }
-            } catch (error) {
-                console.error("Scan error", error);
-                notify('error', 'Failed to scan image for signatures.');
-            }
-        }, 100);
+            }, 50); // Reduced timeout
+        });
+        setIsScanning(false);
     };
 
     const processEncode = (image: AppImage) => {
         if (!message) return notify('error', 'Please provide a message.');
         const currentBytes = getByteLength(message);
-        // Note: Compression happens in worker, so this check is conservative/safe.
         if (currentBytes > maxBytes) return notify('error', `Message is too long! Limit is ${maxBytes} bytes`);
 
         setIsProcessing(true);
         setProgress(0);
-        setStage('analyzing'); // Generating Bitmap
+        setStage('analyzing');
 
         setTimeout(async () => {
             try {
-                // OffscreenCanvas Optimization: Create ImageBitmap to transfer
-                // We create it from the imgObject which is already loaded
                 const bitmap = await createImageBitmap(image.imgObject);
+                setStage('processing');
 
-                setStage('processing'); // Worker Processing
-
-                // Encode returns a Blob directly now!
                 const resultBlob = await steganographyService.encode(
                     bitmap,
                     message,
@@ -130,11 +134,7 @@ export const useSteganography = () => {
                     (p) => setProgress(old => Math.max(old, p))
                 );
 
-                setStage('rendering'); // Finalizing
-
-                // Artificial delay removed/reduced because we already have the blob
-                // But keeping small delay for UX smoothness if needed, or just done.
-                // await new Promise(r => setTimeout(r, 100));
+                setStage('rendering');
 
                 const url = URL.createObjectURL(resultBlob);
                 setResultBlobUrl(url);
@@ -197,6 +197,7 @@ export const useSteganography = () => {
         hasSignature,
         requiresPassword,
         maxBytes,
+        setMaxBytes, // Exposed
         processEncode,
         processDecode,
         handleImageScan,
