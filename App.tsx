@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { steganographyService } from './services/steganographyService';
-import { AppMode, AppImage, NotificationState } from './types';
+import { AppMode, NotificationState } from './types';
 import { IconBlinkingEye, IconDownload, IconEyeOff, IconHeart, IconLock, IconZap, IconChevronDown } from './components/Icons';
 import { Toast } from './components/Toast';
 import { ImagePreview } from './components/ImagePreview';
 import { calculateMaxBytes, getByteLength } from './utils/capacity';
+import { useSteganography } from './hooks/useSteganography';
+import { useImageHandler } from './hooks/useImageHandler';
 
 // Helper to format bytes
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -18,16 +19,9 @@ const formatBytes = (bytes: number, decimals = 2) => {
 
 const App: React.FC = () => {
     const [mode, setMode] = useState<AppMode>(AppMode.HIDE);
-    const [image, setImage] = useState<AppImage | null>(null);
     const [password, setPassword] = useState('');
     const [message, setMessage] = useState('');
-    const [decodedMessage, setDecodedMessage] = useState('');
-    const [isProcessing, setIsProcessing] = useState(false);
     const [notification, setNotification] = useState<NotificationState | null>(null);
-    const [resultBlobUrl, setResultBlobUrl] = useState<string | null>(null);
-    const [resultSize, setResultSize] = useState(0);
-    const [hasSignature, setHasSignature] = useState(false);
-    const [requiresPassword, setRequiresPassword] = useState(false);
     const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
     const [maxBytes, setMaxBytes] = useState(0);
 
@@ -36,53 +30,61 @@ const App: React.FC = () => {
         setTimeout(() => setNotification(null), 4000);
     };
 
-    // Cleanup Result URL
-    useEffect(() => {
-        return () => {
-            if (resultBlobUrl) URL.revokeObjectURL(resultBlobUrl);
-        };
-    }, [resultBlobUrl]);
+    const {
+        image,
+        processFile: handleImageProcess,
+        resetImage
+    } = useImageHandler(notify);
 
-    // Cleanup Worker on unmount
-    useEffect(() => {
-        return () => {
-            steganographyService.terminate();
-        };
-    }, []);
-
-    // Cleanup Image Preview URL (Blob)
-    useEffect(() => {
-        return () => {
-            if (image?.src && image.src.startsWith('blob:')) {
-                URL.revokeObjectURL(image.src);
-            }
-        };
-    }, [image]);
+    const {
+        isProcessing,
+        resultBlobUrl,
+        resultSize,
+        decodedMessage,
+        hasSignature,
+        requiresPassword,
+        encode,
+        decode,
+        scan,
+        clearResult,
+        resetAll: resetStego,
+        progress
+    } = useSteganography(notify);
 
     // Clear result when inputs change to prevent stale downloads
     useEffect(() => {
-        if (resultBlobUrl) {
-            setResultBlobUrl(null);
-        }
-    }, [message, password]);
+        clearResult();
+    }, [message, password, clearResult]);
 
-    const processFile = (file: File) => {
-        const objectUrl = URL.createObjectURL(file);
-        const img = new Image();
-        
-        img.onload = () => {
-            setImage({
-                imgObject: img,
-                width: img.width,
-                height: img.height,
-                src: objectUrl,
-                name: file.name
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            handleImageProcess(file, (img) => {
+                resetStego();
+                setMessage('');
+                setPassword('');
+
+                // Calculate Capacity
+                try {
+                    const capacity = calculateMaxBytes(img.width, img.height);
+                    setMaxBytes(capacity);
+                } catch (e) {
+                    console.error("Capacity calc error", e);
+                    setMaxBytes(0);
+                }
+
+                // Scan for existing messages
+                setTimeout(() => {
+                    scan(img);
+                }, 100);
             });
-            
-            setResultBlobUrl(null);
-            setDecodedMessage('');
-            setHasSignature(false);
-            setRequiresPassword(false);
+        }
+        e.target.value = '';
+    };
+
+    const handleFileDrop = (file: File) => {
+        handleImageProcess(file, (img) => {
+            resetStego();
             setMessage('');
             setPassword('');
 
@@ -95,54 +97,10 @@ const App: React.FC = () => {
                 setMaxBytes(0);
             }
 
-            setTimeout(async () => {
-                try {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                    if (ctx) {
-                        ctx.drawImage(img, 0, 0);
-                        const imageData = ctx.getImageData(0, 0, img.width, img.height);
-                        
-                        const bufferCopy = imageData.data.buffer.slice(0);
-                        const sigType = await steganographyService.scanImage(bufferCopy);
-                        
-                        if (sigType) {
-                            setHasSignature(true);
-                            setRequiresPassword(sigType === 'locked');
-                            notify('success', sigType === 'locked' ? 'Locked message detected!' : 'Open message detected!');
-                        } else {
-                            if (mode === AppMode.SEE) {
-                                notify('error', 'No hidden message found in this image.');
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.error("Scan error", error);
-                    notify('error', 'Failed to scan image for signatures.');
-                }
+            setTimeout(() => {
+                scan(img);
             }, 100);
-        };
-
-        img.onerror = () => {
-            notify('error', 'Failed to load image');
-            URL.revokeObjectURL(objectUrl); 
-        };
-
-        img.src = objectUrl;
-    };
-
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            if (!file.type.startsWith('image/')) {
-                notify('error', 'Please select a valid image file (PNG, JPG).');
-                return;
-            }
-            processFile(file);
-        }
-        e.target.value = '';
+        });
     };
 
     const processEncode = () => {
@@ -150,82 +108,20 @@ const App: React.FC = () => {
         const currentBytes = getByteLength(message);
         if (currentBytes > maxBytes) return notify('error', `Message is too long! Limit is ${formatBytes(maxBytes)}`);
 
-        setIsProcessing(true);
-        setTimeout(async () => {
-            try {
-                const canvas = document.createElement('canvas');
-                canvas.width = image.width;
-                canvas.height = image.height;
-                const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                if (!ctx) throw new Error("Canvas context unavailable");
-
-                ctx.drawImage(image.imgObject, 0, 0);
-                const imgData = ctx.getImageData(0, 0, image.width, image.height);
-                
-                const newPixelBuffer = await steganographyService.encode(imgData.data.buffer, message, password);
-                
-                const newImgData = new ImageData(new Uint8ClampedArray(newPixelBuffer), image.width, image.height);
-                ctx.putImageData(newImgData, 0, 0);
-                
-                canvas.toBlob((blob) => {
-                    if (blob) {
-                        const url = URL.createObjectURL(blob);
-                        setResultBlobUrl(url);
-                        setResultSize(blob.size);
-                        notify('success', 'Encryption complete!');
-                        // Note: We don't clear 'message' here so user can see what they encrypted,
-                        // but UI hides the 'Conceal' button to prevent double encoding.
-                    } else {
-                        notify('error', 'Failed to generate image');
-                    }
-                    setIsProcessing(false);
-                }, 'image/png');
-
-            } catch (err: any) {
-                notify('error', err.message || 'Encoding failed');
-                setIsProcessing(false);
-            }
-        }, 50);
+        encode(image.imgObject, message, password);
     };
 
     const processDecode = () => {
         if (!image) return notify('error', 'Please upload an encoded image.');
-        setIsProcessing(true);
-
-        setTimeout(async () => {
-            try {
-                const canvas = document.createElement('canvas');
-                canvas.width = image.width;
-                canvas.height = image.height;
-                const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                if (!ctx) throw new Error("Canvas context unavailable");
-
-                ctx.drawImage(image.imgObject, 0, 0);
-                const imgData = ctx.getImageData(0, 0, image.width, image.height);
-
-                const text = await steganographyService.decode(imgData.data.buffer, password);
-                setDecodedMessage(text);
-                notify('success', 'Message decrypted!');
-            } catch (err: any) {
-                setDecodedMessage(''); 
-                notify('error', err.message === 'Decryption failed' ? 'Wrong Password' : (err.message || 'Decoding failed'));
-            } finally {
-                setIsProcessing(false);
-            }
-        }, 50);
+        decode(image.imgObject, password);
     };
 
     const reset = () => {
-        setImage(null);
-        setResultBlobUrl(null);
-        setDecodedMessage('');
+        resetImage();
+        resetStego();
         setMessage('');
         setPassword('');
-        setHasSignature(false);
-        setRequiresPassword(false);
         setMaxBytes(0);
-        // Explicitly revoke URLs if needed, though useEffect handles image src cleanup.
-        // We rely on useEffect cleanup for image.src
     };
 
     const toggleMode = (newMode: AppMode) => {
@@ -303,7 +199,7 @@ const App: React.FC = () => {
                         hasSignature={hasSignature} 
                         onReset={reset} 
                         onFileSelect={handleFileSelect} 
-                        onFileDrop={processFile}
+                        onFileDrop={handleFileDrop}
                     />
 
                     {image && (
@@ -368,7 +264,12 @@ const App: React.FC = () => {
                                             aria-label="Encrypt and conceal message"
                                             className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2
                                             ${(!message || isOverLimit) ? 'bg-surface-container text-secondary-container border border-secondary-container cursor-not-allowed' : 'bg-primary hover:bg-white text-on-primary shadow-primary/10'}`}>
-                                            {isProcessing ? <div className="w-6 h-6 border-4 border-on-primary/30 border-t-on-primary rounded-full animate-spin-slow" aria-label="Processing"></div> : <><IconEyeOff className="w-5 h-5"/> Conceal</>}
+                                            {isProcessing ? (
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-6 h-6 border-4 border-on-primary/30 border-t-on-primary rounded-full animate-spin-slow" aria-label="Processing"></div>
+                                                    <span className="text-xs font-bold">{progress}%</span>
+                                                </div>
+                                            ) : <><IconEyeOff className="w-5 h-5"/> Conceal</>}
                                         </button>
                                     )}
                                 </>
@@ -398,7 +299,12 @@ const App: React.FC = () => {
                                     <button onClick={processDecode} disabled={isProcessing || !hasSignature}
                                         className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2
                                         ${isProcessing || !hasSignature ? 'bg-secondary-container text-outline cursor-not-allowed' : 'bg-secondary-container hover:bg-[#5c566b] text-white shadow-secondary-container/20'}`}>
-                                        {isProcessing ? <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin-slow"></div> : <><IconZap className="w-5 h-5"/> Reveal</>}
+                                        {isProcessing ? (
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin-slow"></div>
+                                                <span className="text-xs font-bold">{progress}%</span>
+                                            </div>
+                                        ) : <><IconZap className="w-5 h-5"/> Reveal</>}
                                     </button>
                                 </>
                             )}

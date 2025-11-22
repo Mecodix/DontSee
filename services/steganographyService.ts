@@ -1,7 +1,10 @@
 import { WorkerRequest, WorkerResponse, SignatureType } from '../types';
 
+type ProgressCallback = (progress: number) => void;
+
 class SteganographyService {
     private worker: Worker | null = null;
+    private progressListeners: ProgressCallback[] = [];
 
     constructor() {
         this.initWorker();
@@ -9,12 +12,28 @@ class SteganographyService {
 
     private initWorker() {
         this.worker = new Worker(new URL('./processor.worker.ts', import.meta.url), { type: 'module' });
+        // Set up global listener for progress events
+        this.worker.addEventListener('message', this.handleGlobalMessage);
+    }
+
+    private handleGlobalMessage = (e: MessageEvent) => {
+        if (e.data.type === 'progress') {
+            this.progressListeners.forEach(cb => cb(e.data.progress));
+        }
+    };
+
+    public subscribeProgress(callback: ProgressCallback) {
+        this.progressListeners.push(callback);
+        return () => {
+            this.progressListeners = this.progressListeners.filter(cb => cb !== callback);
+        };
     }
 
     public terminate() {
         if (this.worker) {
             this.worker.terminate();
             this.worker = null;
+            this.progressListeners = [];
         }
     }
 
@@ -25,6 +44,9 @@ class SteganographyService {
             if (!this.worker) return reject('Worker not initialized');
 
             const handler = (e: MessageEvent) => {
+                // Ignore progress messages here, they are handled globally
+                if (e.data.type === 'progress') return;
+
                 this.worker?.removeEventListener('message', handler);
                 resolve(e.data);
             };

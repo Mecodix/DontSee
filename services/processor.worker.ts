@@ -67,9 +67,8 @@ self.onmessage = async (e: MessageEvent) => {
 
             const headerEndIndex = ptr;
 
-            // 6. Embed Body (Scattered)
+            // 6. Embed Body (Scattered with O(1) memory LCG)
             const saltView = new DataView(salt.buffer);
-            // Use first 32 bits of salt as seed for higher entropy
             let seed = saltView.getUint32(0, true);
 
             let availableCount = 0;
@@ -77,28 +76,64 @@ self.onmessage = async (e: MessageEvent) => {
                 if ((i + 1) % 4 !== 0) availableCount++;
             }
 
-            const availableChannels = new Uint32Array(availableCount);
-            let acPtr = 0;
-            for(let i = headerEndIndex; i < pixels.length; i++) {
-                if ((i + 1) % 4 !== 0) availableChannels[acPtr++] = i;
-            }
+            // Helper for Physical Index
+            let validBytesBeforeHeader = Math.floor(headerEndIndex / 4) * 3;
+            const rem = headerEndIndex % 4;
+            if (rem > 0) validBytesBeforeHeader += rem;
 
-            const random = mulberry32(seed);
+            const getPhysicalIndex = (logicalIdx: number) => {
+                const L_abs = logicalIdx + validBytesBeforeHeader;
+                const P = Math.floor(L_abs / 3) * 4 + (L_abs % 3);
+                return P;
+            };
+
+            let limit = availableCount;
+            let m = 1;
+            while (m < limit) m <<= 1; // Next power of 2
+
+            const rng = mulberry32(seed);
+            const a = 4 * Math.floor(rng() * (m/4)) + 1;
+            const c = 2 * Math.floor(rng() * (m/2)) + 1;
+
+            let state = BigInt(seed) % BigInt(m);
+            const bigA = BigInt(a);
+            const bigC = BigInt(c);
+            const bigM = BigInt(m);
+            const limitBI = BigInt(availableCount);
+
+            let bitsEmbedded = 0;
+            let iter = 0;
             const needed = dataBitsLength;
+            const progressStep = Math.ceil(needed / 20);
 
-            for (let i = 0; i < needed; i++) {
-                const j = i + Math.floor(random() * (availableChannels.length - i));
-                const temp = availableChannels[i];
-                availableChannels[i] = availableChannels[j];
-                availableChannels[j] = temp;
+            while(bitsEmbedded < needed) {
+                // LCG Step
+                state = (bigA * state + bigC) % bigM;
 
-                const byteIndex = Math.floor(i / 8);
-                const bitIndex = 7 - (i % 8);
-                const bit = (encryptedBytes[byteIndex] >>> bitIndex) & 1;
+                // Cycle Walk
+                if (state < limitBI) {
+                    const logicalIdx = Number(state);
+                    const targetIdx = getPhysicalIndex(logicalIdx);
 
-                const targetIdx = availableChannels[i];
-                if (bit === 1) pixels[targetIdx] |= 1;
-                else pixels[targetIdx] &= ~1;
+                    // Embed bit
+                    const byteIndex = Math.floor(bitsEmbedded / 8);
+                    const bitIndex = 7 - (bitsEmbedded % 8);
+                    const bit = (encryptedBytes[byteIndex] >>> bitIndex) & 1;
+
+                    if (bit === 1) pixels[targetIdx] |= 1;
+                    else pixels[targetIdx] &= ~1;
+
+                    bitsEmbedded++;
+
+                    if (bitsEmbedded % progressStep === 0) {
+                        postMessage({ type: 'progress', progress: Math.round((bitsEmbedded / needed) * 100) });
+                    }
+                }
+                iter++;
+                // Safety break (should not trigger with correct LCG parameters)
+                if (iter > needed * 100 && bitsEmbedded < needed) {
+                     throw new Error("Scattering generator failed to converge");
+                }
             }
 
             postMessage({ success: true, pixels: pixels.buffer }, { transfer: [pixels.buffer] });
@@ -137,7 +172,7 @@ self.onmessage = async (e: MessageEvent) => {
 
             if (dataBitLength <= 0 || dataBitLength > pixels.length * 3) throw new Error("Corrupt header data");
 
-            // 2. Reconstruct Scatter Logic
+            // 2. Reconstruct Scatter Logic (Mirroring Encode)
             const headerEndIndex = ptr;
             const saltView = new DataView(salt.buffer);
             let seed = saltView.getUint32(0, true);
@@ -147,23 +182,56 @@ self.onmessage = async (e: MessageEvent) => {
                 if ((i + 1) % 4 !== 0) availableCount++;
             }
 
-            const availableChannels = new Uint32Array(availableCount);
-            let acPtr = 0;
-            for(let i = headerEndIndex; i < pixels.length; i++) {
-                if ((i + 1) % 4 !== 0) availableChannels[acPtr++] = i;
-            }
+            // Helper for Physical Index (Same as Encode)
+            let validBytesBeforeHeader = Math.floor(headerEndIndex / 4) * 3;
+            const rem = headerEndIndex % 4;
+            if (rem > 0) validBytesBeforeHeader += rem;
 
-            const random = mulberry32(seed);
+            const getPhysicalIndex = (logicalIdx: number) => {
+                const L_abs = logicalIdx + validBytesBeforeHeader;
+                const P = Math.floor(L_abs / 3) * 4 + (L_abs % 3);
+                return P;
+            };
+
+            // LCG Setup
+            let limit = availableCount;
+            let m = 1;
+            while (m < limit) m <<= 1;
+
+            const rng = mulberry32(seed);
+            const a = 4 * Math.floor(rng() * (m/4)) + 1;
+            const c = 2 * Math.floor(rng() * (m/2)) + 1;
+
+            let state = BigInt(seed) % BigInt(m);
+            const bigA = BigInt(a);
+            const bigC = BigInt(c);
+            const bigM = BigInt(m);
+            const limitBI = BigInt(availableCount);
+
             const bodyBits = new Uint8Array(dataBitLength);
+            let bitsExtracted = 0;
 
-            for (let i = 0; i < dataBitLength; i++) {
-                const j = i + Math.floor(random() * (availableChannels.length - i));
-                const temp = availableChannels[i];
-                availableChannels[i] = availableChannels[j];
-                availableChannels[j] = temp;
+            const progressStep = Math.ceil(dataBitLength / 20);
+            let iter = 0;
 
-                const targetIdx = availableChannels[i];
-                bodyBits[i] = pixels[targetIdx] & 1;
+            while (bitsExtracted < dataBitLength) {
+                state = (bigA * state + bigC) % bigM;
+
+                if (state < limitBI) {
+                    const logicalIdx = Number(state);
+                    const targetIdx = getPhysicalIndex(logicalIdx);
+
+                    bodyBits[bitsExtracted] = pixels[targetIdx] & 1;
+                    bitsExtracted++;
+
+                     if (bitsExtracted % progressStep === 0) {
+                        postMessage({ type: 'progress', progress: Math.round((bitsExtracted / dataBitLength) * 100) });
+                    }
+                }
+                iter++;
+                 if (iter > dataBitLength * 100 && bitsExtracted < dataBitLength) {
+                     throw new Error("Scattering generator failed to converge during decode");
+                }
             }
 
             const encryptedBytes = new Uint8Array(dataBitLength / 8);
