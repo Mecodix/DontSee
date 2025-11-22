@@ -57,7 +57,13 @@ const App: React.FC = () => {
         const img = new Image();
         
         img.onload = () => {
-            setImage({ imgObject: img, width: img.width, height: img.height, src: objectUrl });
+            setImage({
+                imgObject: img,
+                width: img.width,
+                height: img.height,
+                src: objectUrl,
+                name: file.name
+            });
             
             setResultBlobUrl(null);
             setDecodedMessage('');
@@ -67,8 +73,13 @@ const App: React.FC = () => {
             setPassword('');
 
             // Calculate Capacity
-            const capacity = calculateMaxBytes(img.width, img.height);
-            setMaxBytes(capacity);
+            try {
+                const capacity = calculateMaxBytes(img.width, img.height);
+                setMaxBytes(capacity);
+            } catch (e) {
+                console.error("Capacity calc error", e);
+                setMaxBytes(0);
+            }
 
             setTimeout(async () => {
                 try {
@@ -95,6 +106,7 @@ const App: React.FC = () => {
                     }
                 } catch (error) {
                     console.error("Scan error", error);
+                    notify('error', 'Failed to scan image for signatures.');
                 }
             }, 100);
         };
@@ -192,6 +204,8 @@ const App: React.FC = () => {
         setHasSignature(false);
         setRequiresPassword(false);
         setMaxBytes(0);
+        // Explicitly revoke URLs if needed, though useEffect handles image src cleanup.
+        // We rely on useEffect cleanup for image.src
     };
 
     const toggleMode = (newMode: AppMode) => {
@@ -224,10 +238,18 @@ const App: React.FC = () => {
                 <div className="md:w-1/3 bg-[#2b2930] p-8 flex flex-col border-b md:border-b-0 md:border-r border-secondary-container">
                     <div className="bg-surface-container p-1 rounded-full flex border border-secondary-container relative mb-8">
                         <div className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-secondary-container rounded-full transition-all duration-300 ease-out ${mode === AppMode.HIDE ? 'left-1' : 'translate-x-full left-1'}`}></div>
-                        <button onClick={() => toggleMode(AppMode.HIDE)} className={`flex-1 relative z-10 py-3 rounded-full text-sm font-bold flex justify-center items-center gap-2 transition-colors ${mode === AppMode.HIDE ? 'text-white' : 'text-outline'}`}>
+                        <button
+                            onClick={() => toggleMode(AppMode.HIDE)}
+                            className={`flex-1 relative z-10 py-3 rounded-full text-sm font-bold flex justify-center items-center gap-2 transition-colors ${mode === AppMode.HIDE ? 'text-white' : 'text-outline'}`}
+                            aria-label="Switch to conceal mode"
+                        >
                             <IconEyeOff className="w-4 h-4" /> Conceal
                         </button>
-                        <button onClick={() => toggleMode(AppMode.SEE)} className={`flex-1 relative z-10 py-3 rounded-full text-sm font-bold flex justify-center items-center gap-2 transition-colors ${mode === AppMode.SEE ? 'text-white' : 'text-outline'}`}>
+                        <button
+                            onClick={() => toggleMode(AppMode.SEE)}
+                            className={`flex-1 relative z-10 py-3 rounded-full text-sm font-bold flex justify-center items-center gap-2 transition-colors ${mode === AppMode.SEE ? 'text-white' : 'text-outline'}`}
+                            aria-label="Switch to reveal mode"
+                        >
                             <IconBlinkingEye className="w-4 h-4" /> Reveal
                         </button>
                     </div>
@@ -236,6 +258,8 @@ const App: React.FC = () => {
                         <button 
                             onClick={() => setIsDescriptionOpen(!isDescriptionOpen)}
                             className="flex items-center gap-3 group text-left focus:outline-none w-full"
+                            aria-expanded={isDescriptionOpen}
+                            aria-label="Toggle description"
                         >
                             <h2 className="text-2xl font-bold text-white font-brand group-hover:text-primary transition-colors">
                                 {mode === AppMode.HIDE ? 'Encrypt & Conceal' : 'Decrypt & Reveal'}
@@ -311,15 +335,21 @@ const App: React.FC = () => {
                                                 <p className="text-white font-bold text-sm mb-0.5">Ready</p>
                                                 <p className="text-outline text-xs font-mono">{formatBytes(resultSize)}</p>
                                             </div>
-                                            <a href={resultBlobUrl} download="dontsee_secure.png" className="w-12 h-12 bg-primary hover:bg-white text-on-primary rounded-full flex items-center justify-center transition-transform active:scale-95 shadow-lg">
+                                            <a
+                                                href={resultBlobUrl}
+                                                download={image ? `${image.name.split('.').slice(0, -1).join('.')}_secure.png` : 'dontsee_secure.png'}
+                                                className="w-12 h-12 bg-primary hover:bg-white text-on-primary rounded-full flex items-center justify-center transition-transform active:scale-95 shadow-lg"
+                                                aria-label="Download encoded image"
+                                            >
                                                 <IconDownload className="w-6 h-6" />
                                             </a>
                                         </div>
                                     ) : (
                                         <button onClick={processEncode} disabled={isProcessing || !message || isOverLimit}
+                                            aria-label="Encrypt and conceal message"
                                             className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2
                                             ${(!message || isOverLimit) ? 'bg-surface-container text-secondary-container border border-secondary-container cursor-not-allowed' : 'bg-primary hover:bg-white text-on-primary shadow-primary/10'}`}>
-                                            {isProcessing ? <div className="w-6 h-6 border-4 border-on-primary/30 border-t-on-primary rounded-full animate-spin-slow"></div> : <><IconEyeOff className="w-5 h-5"/> Conceal</>}
+                                            {isProcessing ? <div className="w-6 h-6 border-4 border-on-primary/30 border-t-on-primary rounded-full animate-spin-slow" aria-label="Processing"></div> : <><IconEyeOff className="w-5 h-5"/> Conceal</>}
                                         </button>
                                     )}
                                 </>
