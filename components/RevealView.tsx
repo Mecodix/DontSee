@@ -1,6 +1,7 @@
 import React from 'react';
 import { IconLock, IconZap } from './Icons';
 import { AppImage, ProcessingStage } from '../types';
+import { ExpandableTextarea } from './ExpandableTextarea';
 
 interface RevealViewProps {
     image: AppImage | null;
@@ -49,9 +50,13 @@ export const RevealView: React.FC<RevealViewProps> = ({
             )}
 
             {decodedMessage && (
-                <div className="flex-1 bg-surface-container border border-primary/50 rounded-2xl p-6 flex items-center justify-center transition-colors min-h-[120px] animate-slide-up">
-                    <p className="w-full text-left text-primary font-mono text-sm break-words whitespace-pre-wrap">{decodedMessage}</p>
-                </div>
+                <ExpandableTextarea
+                    value={decodedMessage}
+                    readOnly
+                    className="bg-surface-container border-primary/50 text-primary font-mono text-sm rounded-2xl focus:outline-none focus:ring-1 transition-colors animate-slide-up"
+                    maxHeight="h-40"
+                    placeholder="Decoded message will appear here..."
+                />
             )}
 
             <button onClick={() => image && onDecode(image)} disabled={isProcessing || !hasSignature}
