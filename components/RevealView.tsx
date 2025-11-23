@@ -1,9 +1,9 @@
 import React from 'react';
 import { IconLock, IconZap } from './Icons';
 import { AppImage, ProcessingStage } from '../types';
-import { ExpandableTextarea } from './ExpandableTextarea';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
+import { ExpandableTextarea } from './ExpandableTextarea';
 
 interface RevealViewProps {
     image: AppImage | null;
@@ -44,7 +44,7 @@ export const RevealView: React.FC<RevealViewProps> = ({
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Enter Password to Unlock"
                         startIcon={<IconLock className="w-5 h-5" />}
-                        autoFocus
+                        // autoFocus removed
                     />
                 </div>
             )}
@@ -52,27 +52,35 @@ export const RevealView: React.FC<RevealViewProps> = ({
             {decodedMessage && (
                 <div className="relative group animate-slide-up">
                     <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-blue-500 rounded-2xl opacity-20 group-hover:opacity-40 transition duration-500 blur"></div>
-                    <ExpandableTextarea
-                        value={decodedMessage}
-                        readOnly
-                        className="relative bg-black/40 border-white/10 text-primary font-mono text-sm rounded-2xl p-5 focus:outline-none focus:ring-0 resize-none shadow-xl"
-                        maxHeight="h-60"
-                        placeholder="Decoded message will appear here..."
-                    />
+
+                    {/* Fixed Height Container */}
+                    <div className="relative bg-black/40 border border-white/10 rounded-2xl overflow-hidden shadow-xl h-48">
+                         {/* We pass 'h-full' to the textarea so it fills the 48 unit height container.
+                             ExpandableTextarea handles the scroll internally via the textarea element. */}
+                        <ExpandableTextarea
+                            value={decodedMessage}
+                            readOnly
+                            className="bg-transparent border-none text-primary font-mono text-sm p-5 focus:outline-none focus:ring-0 resize-none w-full h-full"
+                            placeholder="Decoded text will appear here..."
+                            // Ensure the internal textarea takes full height
+                            style={{ height: '100%' }}
+                        />
+                    </div>
                 </div>
             )}
 
             <div className="relative overflow-hidden rounded-2xl">
+                {/* Updated Button Color to match standard primary UI (consistent with Conceal) */}
                 <Button
-                    variant="primary" // Changed to primary for better visibility in this flow
+                    variant="primary"
                     onClick={() => image && onDecode(image)}
                     disabled={isProcessing || !hasSignature}
                     isLoading={isProcessing}
                     loadingText={getButtonLabel()}
                     icon={!isProcessing && <IconZap className="w-5 h-5" />}
-                    className="w-full text-base py-5 shadow-xl bg-gradient-to-r from-indigo-500 to-primary hover:from-indigo-400 hover:to-primary/90"
+                    className="w-full text-base py-5 shadow-xl"
                 >
-                    {!isProcessing && "Reveal Secret"}
+                    {!isProcessing && "Reveal Text"}
                 </Button>
 
                  {/* Progress Bar Overlays */}

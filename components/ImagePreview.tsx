@@ -70,7 +70,7 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
             )}>
             
             {isLoading && !image && (
-                 <div className="absolute inset-0 z-20 bg-surface/80 backdrop-blur-md flex flex-col items-center justify-center">
+                 <div className="absolute inset-0 z-20 bg-surface/95 backdrop-blur-xl flex flex-col items-center justify-center">
                      <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
                      <span className="text-white font-bold animate-pulse">Processing Image...</span>
                  </div>
@@ -86,7 +86,7 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
                          <button onClick={onReset}
                             disabled={isLoading}
                             aria-label="Remove image"
-                            className="bg-black/50 hover:bg-red-500/80 p-2.5 rounded-full text-white backdrop-blur-md border border-white/10 transition-all hover:scale-110 shadow-lg">
+                            className="w-10 h-10 flex items-center justify-center bg-black/50 hover:bg-red-500/80 rounded-full text-white backdrop-blur-md border border-white/10 transition-all hover:scale-110 shadow-lg">
                             <IconX className="w-5 h-5" />
                         </button>
                     </div>
@@ -97,16 +97,16 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
                             role="status"
                             aria-live="polite"
                             className={cn(
-                                "absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 animate-slide-up shadow-xl z-10 border backdrop-blur-md",
+                                "absolute bottom-4 left-4 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 animate-slide-up shadow-xl z-10 border backdrop-blur-md",
                                 requiresPassword
                                     ? 'bg-primary/90 text-white border-white/20 shadow-primary/20'
                                     : 'bg-emerald-500/90 text-white border-white/20 shadow-emerald-500/20'
                             )}
                         >
                             {requiresPassword ? (
-                                <><IconLock className="w-3.5 h-3.5" /> Locked Message</>
+                                <><IconLock className="w-3.5 h-3.5" /> Locked Text</>
                             ) : (
-                                <><IconUnlock className="w-3.5 h-3.5" /> Open Message</>
+                                <><IconUnlock className="w-3.5 h-3.5" /> Open Text</>
                             )}
                         </div>
                     )}

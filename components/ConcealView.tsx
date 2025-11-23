@@ -78,7 +78,7 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                 <ExpandableTextarea
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Enter your secret message here..."
+                    placeholder="Enter your secret text here..."
                     className={cn(
                         "flex-1 min-h-[140px] bg-white/5 border text-white rounded-2xl p-4 focus:outline-none focus:ring-1 transition-all duration-300 placeholder:text-gray-600 resize-none",
                         isOverLimit
@@ -142,7 +142,7 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                         icon={!isProcessing && <IconEyeOff className="w-5 h-5" />}
                         className="w-full text-base py-5 shadow-xl"
                     >
-                        {!isProcessing && "Conceal Message"}
+                        {!isProcessing && "Conceal Text"}
                     </Button>
 
                     {/* Progress Bar Overlays */}

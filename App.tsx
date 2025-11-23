@@ -41,7 +41,7 @@ const getHeaderContent = (
     if (isScanning) {
         return {
             title: "Analyzing",
-            desc: "Checking for hidden messages..."
+            desc: "Checking for hidden text..."
         };
     }
     if (!image) {
@@ -53,7 +53,7 @@ const getHeaderContent = (
     if (mode === AppMode.HIDE) {
         return {
             title: "Conceal",
-            desc: "Hide your secret message."
+            desc: "Hide your secret text."
         };
     }
     // Reveal Mode
@@ -65,7 +65,7 @@ const getHeaderContent = (
     }
     return {
         title: "Found Secret",
-        desc: "Hidden message detected."
+        desc: "Hidden text detected."
     };
 };
 
