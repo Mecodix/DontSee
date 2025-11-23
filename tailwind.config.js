@@ -2,7 +2,10 @@
 export default {
   content: [
     "./index.html",
-    "./**/*.{js,ts,jsx,tsx}",
+    "./src/**/*.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}",
+    "./hooks/**/*.{js,ts,jsx,tsx}",
+    "./*.{js,ts,jsx,tsx}" // Captures App.tsx, index.tsx, types.ts in root
   ],
   theme: {
     extend: {
@@ -26,25 +29,26 @@ export default {
 
         error: 'rgb(var(--color-error) / <alpha-value>)',
         'error-container': 'rgb(var(--color-error-container) / <alpha-value>)',
+        success: 'rgb(var(--color-success) / <alpha-value>)',
       },
       animation: {
-        'slide-down': 'slideDown 0.4s cubic-bezier(0.2, 0, 0.2, 1) forwards',
-        'slide-up': 'slideUp 0.5s cubic-bezier(0.2, 0.0, 0.2, 1) forwards',
-        'blink-eye': 'blink 4s infinite',
-        'spin-slow': 'spin 1s linear infinite',
+        'enter': 'enter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'fade-in': 'fadeIn 0.2s ease-out forwards',
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'spin-slow': 'spin 1.5s linear infinite',
       },
       keyframes: {
-        slideDown: {
-          'from': { opacity: '0', transform: 'translate(-50%, -20px)' },
-          'to': { opacity: '1', transform: 'translate(-50%, 0)' },
+        enter: {
+          'from': { opacity: '0', transform: 'translateY(10px) scale(0.98)' },
+          'to': { opacity: '1', transform: 'translateY(0) scale(1)' },
         },
-        slideUp: {
-          'from': { opacity: '0', transform: 'translateY(20px)' },
-          'to': { opacity: '1', transform: 'translateY(0)' },
+        fadeIn: {
+          'from': { opacity: '0' },
+          'to': { opacity: '1' },
         },
-        blink: {
-          '0%, 48%, 52%, 100%': { transform: 'scaleY(1)' },
-          '50%': { transform: 'scaleY(0.1)' },
+        pulse: {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.5' },
         }
       }
     }

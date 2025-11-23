@@ -12,6 +12,7 @@ import { usePasteHandler } from './hooks/usePasteHandler';
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 import { AppShell } from './components/layout/AppShell';
 import { Typography } from './components/ui/Typography';
+import { cn } from './utils/cn';
 
 // Helper to format bytes
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -33,38 +34,38 @@ const getHeaderContent = (
 ) => {
     if (isReading) {
         return {
-            title: "Reading Image...",
-            desc: "Decoding image data..."
+            title: "Reading Image",
+            desc: "Decoding pixels..."
         };
     }
     if (isScanning) {
         return {
-            title: "Analyzing Image...",
-            desc: "Please wait while we check for hidden messages..."
+            title: "Analyzing",
+            desc: "Checking for hidden messages..."
         };
     }
     if (!image) {
         return {
-            title: "Hide or Reveal Secrets",
-            desc: "Upload a DontSee image to decrypt, or any image to hide a new message."
+            title: "Steganography",
+            desc: "Hide text in images, or reveal secrets."
         };
     }
     if (mode === AppMode.HIDE) {
         return {
-            title: "Conceal Text",
-            desc: "Hide text inside images using steganography. Optionally add a password for AES-GCM encryption."
+            title: "Conceal",
+            desc: "Hide your secret message."
         };
     }
     // Reveal Mode
     if (requiresPassword) {
         return {
-            title: "Locked Message",
-            desc: "Locked message detected. Enter password to reconstruct the scattered data."
+            title: "Locked",
+            desc: "Password required to decrypt."
         };
     }
     return {
-        title: "Reveal Secret",
-        desc: "Hidden message found. Click Reveal to read the secret."
+        title: "Found Secret",
+        desc: "Hidden message detected."
     };
 };
 
@@ -80,7 +81,7 @@ const App: React.FC = () => {
     const {
         password, setPassword,
         message, setMessage,
-        decodedMessage, setDecodedMessage,
+        decodedMessage,
         isProcessing,
         progress,
         stage,
@@ -214,12 +215,12 @@ const App: React.FC = () => {
     );
 
     const dragOverlayContent = isDragging ? (
-        <div className="fixed inset-0 z-[999] bg-surface/90 backdrop-blur-md flex flex-col items-center justify-center border-4 border-primary border-dashed m-4 rounded-[32px] animate-pulse">
-            <div className="bg-primary/20 p-8 rounded-full mb-6">
+        <div className="fixed inset-0 z-[999] bg-surface/90 backdrop-blur-xl flex flex-col items-center justify-center m-4 rounded-[32px] animate-pulse">
+            <div className="bg-primary/20 p-8 rounded-full mb-6 ring-4 ring-primary/10">
                 <IconFilePlus className="w-16 h-16 text-primary" />
             </div>
-            <Typography variant="h1" className="text-4xl">Drop Image Here</Typography>
-            <Typography variant="body" className="text-outline mt-4 text-lg">Release to upload instantly</Typography>
+            <Typography variant="h1" className="text-4xl text-transparent bg-clip-text bg-gradient-to-br from-white to-white/50">Drop Image Here</Typography>
+            <Typography variant="body" className="text-gray-400 mt-4 text-lg">Release to upload instantly</Typography>
         </div>
     ) : null;
 
@@ -228,19 +229,20 @@ const App: React.FC = () => {
             showToast={<Toast notification={notification} />}
             dragOverlay={dragOverlayContent}
         >
-            <div className="md:w-1/3 bg-surface-raised p-8 flex flex-col border-b md:border-b-0 md:border-r border-secondary-container justify-center min-h-[200px]">
-                {/* Unified Header: No Tabs */}
-                <div className="flex flex-col gap-4">
-                    <Typography variant="h1" className="transition-all duration-300 animate-slide-up" key={headerTitle}>
-                        {headerTitle}
-                    </Typography>
-                    <Typography variant="body" className="text-sm animate-slide-up" key={headerDesc}>
-                        {headerDesc}
-                    </Typography>
-                </div>
+            {/* Status Header - Dynamic based on state */}
+            <div className="flex flex-col items-center text-center gap-2 mb-2 animate-slide-up" key={headerTitle}>
+                <Typography variant="h2" className={cn(
+                    "transition-colors duration-300",
+                    image ? "text-white" : "text-white/80"
+                )}>
+                    {headerTitle}
+                </Typography>
+                <Typography variant="body" className="text-gray-500 max-w-sm mx-auto">
+                    {headerDesc}
+                </Typography>
             </div>
 
-            <div className="flex-1 p-8 flex flex-col relative">
+            <div className="flex-1 flex flex-col gap-8 relative w-full">
                 
                 <ImagePreview
                     image={image}
@@ -252,15 +254,19 @@ const App: React.FC = () => {
                     isLoading={isReading || isScanning}
                 />
 
+                {/* Content Area - Slides up when image is present */}
                 {(image || isScanning || isReading) && (
-                    <div className="flex-1 flex flex-col gap-5 animate-slide-up mt-8">
+                    <div className="flex-1 flex flex-col gap-5 animate-enter">
 
                         {(isScanning || isReading) ? (
-                            <div className="flex-1 flex items-center justify-center h-full min-h-[200px]">
-                                <div className="flex flex-col items-center gap-3">
-                                    <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
-                                    <Typography variant="caption">
-                                        {isReading ? "Decoding image data..." : "Scanning for signature..."}
+                            <div className="flex-1 flex flex-col items-center justify-center h-full min-h-[200px] gap-4 bg-surface-raised/30 rounded-[24px] border border-white/5 backdrop-blur-sm">
+                                <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+                                <div className="flex flex-col items-center">
+                                    <Typography variant="label" className="text-primary mb-1">
+                                        {isReading ? "Reading Bits" : "Analyzing Noise"}
+                                    </Typography>
+                                    <Typography variant="caption" className="text-gray-500">
+                                        Please wait...
                                     </Typography>
                                 </div>
                             </div>

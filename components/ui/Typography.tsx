@@ -22,12 +22,12 @@ export const Typography: React.FC<TypographyProps> = ({
     );
 
     const styles = {
-        h1: "text-3xl font-bold font-brand text-white",
-        h2: "text-2xl font-bold font-brand text-white",
-        h3: "text-xl font-bold font-brand text-white",
-        body: "text-base text-white/70 leading-relaxed font-sans",
-        caption: "text-xs font-mono text-outline",
-        label: "text-sm font-medium font-brand text-outline"
+        h1: "text-4xl md:text-5xl font-bold font-brand text-white tracking-tight bg-gradient-to-br from-white to-white/60 bg-clip-text text-transparent",
+        h2: "text-2xl md:text-3xl font-bold font-brand text-white tracking-tight",
+        h3: "text-xl font-semibold font-brand text-white/90",
+        body: "text-base text-gray-400 leading-relaxed font-sans",
+        caption: "text-xs font-medium text-gray-500 uppercase tracking-widest",
+        label: "text-sm font-medium font-brand text-gray-300"
     };
 
     return (

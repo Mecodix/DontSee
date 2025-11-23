@@ -1,6 +1,7 @@
 import React, { useState, DragEvent, KeyboardEvent, useRef } from 'react';
 import { IconUpload, IconX, IconLock, IconUnlock } from './Icons';
 import { AppImage } from '../types';
+import { cn } from '../utils/cn';
 
 interface ImagePreviewProps {
     image: AppImage | null;
@@ -26,7 +27,6 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
         e.preventDefault();
         e.stopPropagation();
 
-        // Prevent flicker when dragging over children
         if (e.currentTarget.contains(e.relatedTarget as Node)) {
             return;
         }
@@ -59,40 +59,49 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`relative rounded-3xl overflow-hidden border-2 transition-all duration-300 w-full
-            ${image 
-                ? 'border-secondary-container bg-surface' 
-                : `min-h-[250px] md:min-h-[400px] cursor-pointer group ${isDragging
-                    ? 'border-primary bg-primary/10'
-                    : 'border-dashed border-secondary-container hover:border-primary hover:bg-secondary-container/20 focus-within:border-primary focus-within:bg-secondary-container/20'}`
-            }`}>
+            className={cn(
+                "relative rounded-[24px] overflow-hidden transition-all duration-300 w-full group select-none",
+                image
+                    ? 'bg-transparent'
+                    : cn(
+                        "min-h-[300px] border-2 border-dashed border-white/10 hover:border-primary/50 hover:bg-white/[0.02]",
+                        isDragging && "border-primary bg-primary/5 scale-[1.02] shadow-[0_0_40px_rgba(168,85,247,0.2)]"
+                    )
+            )}>
             
             {isLoading && !image && (
-                 <div className="absolute inset-0 z-20 bg-surface/80 backdrop-blur-sm flex flex-col items-center justify-center">
+                 <div className="absolute inset-0 z-20 bg-surface/80 backdrop-blur-md flex flex-col items-center justify-center">
                      <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
-                     <span className="text-white font-bold animate-pulse">Reading Image...</span>
+                     <span className="text-white font-bold animate-pulse">Processing Image...</span>
                  </div>
             )}
 
             {image ? (
-                <div className="w-full relative flex justify-center bg-black/50">
-                    <img src={image.src} className="w-full h-auto max-h-[500px] min-h-[200px] md:min-h-[300px] object-contain" alt="Preview" />
+                <div className="w-full relative flex justify-center rounded-[24px] overflow-hidden shadow-2xl border border-white/5 bg-surface-raised/30 backdrop-blur-sm">
+                    {/* Image Container */}
+                    <img src={image.src} className="w-full h-auto max-h-[500px] object-contain animate-enter" alt="Preview" />
                     
-                    <button onClick={onReset} 
-                        disabled={isLoading}
-                        aria-label="Remove image"
-                        className="absolute top-3 right-3 bg-surface-container/80 p-2 rounded-full text-white hover:text-error backdrop-blur-sm border border-secondary-container transition-transform hover:scale-110">
-                        <IconX className="w-5 h-5" />
-                    </button>
+                    {/* Action Overlay */}
+                    <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                         <button onClick={onReset}
+                            disabled={isLoading}
+                            aria-label="Remove image"
+                            className="bg-black/50 hover:bg-red-500/80 p-2.5 rounded-full text-white backdrop-blur-md border border-white/10 transition-all hover:scale-110 shadow-lg">
+                            <IconX className="w-5 h-5" />
+                        </button>
+                    </div>
+
                     
                     {hasSignature && (
                         <div
                             role="status"
                             aria-live="polite"
-                            className={`absolute bottom-3 left-3 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 animate-slide-up shadow-lg z-10 border backdrop-blur-md
-                            ${requiresPassword
-                                ? 'bg-primary/90 text-on-primary border-primary-container'
-                                : 'bg-secondary-container/90 text-white border-white/20'}`}
+                            className={cn(
+                                "absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 animate-slide-up shadow-xl z-10 border backdrop-blur-md",
+                                requiresPassword
+                                    ? 'bg-primary/90 text-white border-white/20 shadow-primary/20'
+                                    : 'bg-emerald-500/90 text-white border-white/20 shadow-emerald-500/20'
+                            )}
                         >
                             {requiresPassword ? (
                                 <><IconLock className="w-3.5 h-3.5" /> Locked Message</>
@@ -103,20 +112,29 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
                     )}
                 </div>
             ) : (
-                // Accessibility Improvements: Focusable div + Keyboard handler
                 <div
                     role="button"
                     tabIndex={0}
                     onKeyDown={handleKeyDown}
                     onClick={() => fileInputRef.current?.click()}
-                    className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer focus:outline-none rounded-3xl"
+                    className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer focus:outline-none"
                     aria-label="Upload an image"
                 >
-                    <div className={`bg-secondary-container p-6 rounded-full mb-6 text-white transition-transform shadow-xl shadow-black/30 ${isDragging ? 'scale-125' : 'group-hover:scale-110'}`}>
+                    <div className={cn(
+                        "p-6 rounded-full mb-6 text-primary bg-primary/10 transition-transform duration-300 shadow-[0_0_30px_rgba(168,85,247,0.15)]",
+                        isDragging ? 'scale-110 bg-primary/20' : 'group-hover:scale-110 group-hover:rotate-3'
+                    )}>
                         <IconUpload className="w-10 h-10" />
                     </div>
-                    <span className="text-white font-bold text-lg">{isDragging ? 'Drop it here!' : 'Tap or Drag to Upload'}</span>
-                    <span className="text-outline text-sm mt-2">PNG or JPG</span>
+                    <span className="text-white font-bold text-xl tracking-tight">
+                        {isDragging ? 'Drop it like it\'s hot!' : 'Upload Image'}
+                    </span>
+                    <span className="text-gray-500 text-sm mt-2 font-medium">
+                        Drag & Drop or Click to Browse
+                    </span>
+                    <span className="mt-4 px-3 py-1 bg-white/5 rounded-full text-xs text-gray-500 border border-white/5">
+                        PNG, JPG, WebP
+                    </span>
                     
                     <input
                         ref={fileInputRef}
