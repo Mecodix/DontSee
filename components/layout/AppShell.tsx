@@ -44,7 +44,8 @@ export const AppShell: React.FC<AppShellProps> = ({
                     <Typography variant="caption" className="text-gray-500">
                         Crafted with
                     </Typography>
-                    <IconHeart className="w-3 h-3 text-red-400 animate-pulse" />
+                    {/* Updated Heart Icon to Pink as requested */}
+                    <IconHeart className="w-3 h-3 text-pink-500 animate-pulse" />
                     <Typography variant="caption" className="text-gray-500">
                         by Ayush
                     </Typography>
