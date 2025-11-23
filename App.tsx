@@ -121,16 +121,7 @@ const App: React.FC = () => {
         }
     }, [hasSignature, image, isScanning]);
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) processFileHelper(file);
-        e.target.value = '';
-    };
-
-    const handleFileDrop = (file: File) => {
-        processFileHelper(file);
-    };
-
+    // Re-implemented helper to keep logic clean as requested in previous turn
     const processFileHelper = (file: File) => {
         setIsReading(true);
         resetStegoState();
@@ -143,6 +134,16 @@ const App: React.FC = () => {
             }
         );
     }
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) processFileHelper(file);
+        e.target.value = '';
+    };
+
+    const handleFileDrop = (file: File) => {
+        processFileHelper(file);
+    };
 
     const { isDragging } = useGlobalDragDrop(handleFileDrop);
 
