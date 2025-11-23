@@ -2,6 +2,9 @@ import React from 'react';
 import { IconLock, IconZap } from './Icons';
 import { AppImage, ProcessingStage } from '../types';
 import { ExpandableTextarea } from './ExpandableTextarea';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
+import { Typography } from './ui/Typography';
 
 interface RevealViewProps {
     image: AppImage | null;
@@ -35,16 +38,13 @@ export const RevealView: React.FC<RevealViewProps> = ({
     return (
         <>
             {requiresPassword && (
-                <div className="relative animate-slide-up">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                        <IconLock className="text-outline" />
-                    </div>
-                    <input
+                <div className="animate-slide-up">
+                    <Input
                         type="password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Enter Password to Unlock"
-                        className="w-full bg-surface border border-secondary-container text-white text-sm rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder-outline"
+                        startIcon={<IconLock className="w-5 h-5" />}
                     />
                 </div>
             )}
@@ -59,26 +59,27 @@ export const RevealView: React.FC<RevealViewProps> = ({
                 />
             )}
 
-            <button onClick={() => image && onDecode(image)} disabled={isProcessing || !hasSignature}
-                className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2 relative overflow-hidden
-                ${isProcessing || !hasSignature ? 'bg-secondary-container text-outline cursor-not-allowed' : 'bg-secondary-container hover:bg-secondary-hover text-white shadow-secondary-container/20'}`}>
+            <div className="relative overflow-hidden rounded-2xl">
+                <Button
+                    variant="secondary"
+                    onClick={() => image && onDecode(image)}
+                    disabled={isProcessing || !hasSignature}
+                    isLoading={isProcessing}
+                    loadingText={getButtonLabel()}
+                    icon={!isProcessing && <IconZap />}
+                    className="w-full"
+                >
+                    {!isProcessing && "Reveal"}
+                </Button>
 
-                {isProcessing ? (
-                    <div className="flex items-center gap-2 z-10 relative">
-                        <div className="w-5 h-5 border-4 border-white/30 border-t-white rounded-full animate-spin-slow"></div>
-                        <span>{getButtonLabel()}</span>
-                    </div>
-                ) : (
-                    <><IconZap className="w-5 h-5"/> Reveal</>
-                )}
-
-                {isProcessing && stage === 'processing' && (
-                    <div className="absolute inset-0 bg-white/10 z-0 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }}></div>
+                 {/* Progress Bar Overlays */}
+                 {isProcessing && stage === 'processing' && (
+                    <div className="absolute inset-0 bg-white/10 z-20 pointer-events-none transition-all duration-100 ease-linear mix-blend-overlay" style={{ width: `${progress}%` }}></div>
                 )}
                 {isProcessing && stage !== 'processing' && (
-                    <div className="absolute inset-0 bg-white/5 z-0 animate-pulse"></div>
+                     <div className="absolute inset-0 bg-white/5 z-20 pointer-events-none animate-pulse mix-blend-overlay"></div>
                 )}
-            </button>
+            </div>
 
             <div className="w-full text-center mt-4 animate-slide-up">
                 <button onClick={onReConceal} className="text-sm text-outline hover:text-primary transition-colors">
