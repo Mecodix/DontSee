@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AppMode } from './types';
+import { AppMode, AppImage } from './types';
 import { IconBlinkingEye, IconHeart } from './components/Icons';
 import { Toast } from './components/Toast';
 import { ImagePreview } from './components/ImagePreview';
@@ -18,6 +18,51 @@ const formatBytes = (bytes: number, decimals = 2) => {
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+};
+
+// Helper: Get Header Content
+const getHeaderContent = (
+    isReading: boolean,
+    isScanning: boolean,
+    image: AppImage | null,
+    mode: AppMode,
+    requiresPassword: boolean
+) => {
+    if (isReading) {
+        return {
+            title: "Reading Image...",
+            desc: "Decoding image data..."
+        };
+    }
+    if (isScanning) {
+        return {
+            title: "Analyzing Image...",
+            desc: "Please wait while we check for hidden messages..."
+        };
+    }
+    if (!image) {
+        return {
+            title: "Hide or Reveal Secrets",
+            desc: "Upload a DontSee image to decrypt, or any image to hide a new message."
+        };
+    }
+    if (mode === AppMode.HIDE) {
+        return {
+            title: "Conceal Text",
+            desc: "Hide text inside images using steganography. Optionally add a password for AES-GCM encryption."
+        };
+    }
+    // Reveal Mode
+    if (requiresPassword) {
+        return {
+            title: "Locked Message",
+            desc: "Locked message detected. Enter password to reconstruct the scattered data."
+        };
+    }
+    return {
+        title: "Reveal Secret",
+        desc: "Hidden message found. Click Reveal to read the secret."
+    };
 };
 
 const App: React.FC = () => {
@@ -154,24 +199,13 @@ const App: React.FC = () => {
         return `${progress}%`;
     };
 
-    // Dynamic Header Text - Prioritize Scanning/Reading State
-    const headerTitle = isReading
-        ? "Reading Image..."
-        : (isScanning
-            ? "Analyzing Image..."
-            : (!image ? "Hide or Reveal Secrets" : (mode === AppMode.HIDE ? "Conceal Text" : "Reveal Secret")));
-
-    const headerDesc = isReading
-        ? "Decoding image data..."
-        : (isScanning
-            ? "Please wait while we check for hidden messages..."
-            : (!image
-                ? "Upload a DontSee image to decrypt, or any image to hide a new message."
-                : (mode === AppMode.HIDE
-                ? "Hide text inside images using steganography. Optionally add a password for AES-GCM encryption."
-                : (requiresPassword
-                    ? "Locked message detected. Enter password to reconstruct the scattered data."
-                    : "Hidden message found. Click Reveal to read the secret."))));
+    const { title: headerTitle, desc: headerDesc } = getHeaderContent(
+        isReading,
+        isScanning,
+        image,
+        mode,
+        requiresPassword
+    );
 
     return (
         <div className="min-h-screen w-full flex flex-col items-center py-8 px-4">
