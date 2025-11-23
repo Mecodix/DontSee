@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AppMode, AppImage } from './types';
-import { IconBlinkingEye, IconHeart, IconFilePlus } from './components/Icons';
+import { IconFilePlus } from './components/Icons';
 import { Toast } from './components/Toast';
 import { ImagePreview } from './components/ImagePreview';
 import { ConcealView } from './components/ConcealView';
@@ -10,6 +10,8 @@ import { useImageHandler } from './hooks/useImageHandler';
 import { useSteganography } from './hooks/useSteganography';
 import { usePasteHandler } from './hooks/usePasteHandler';
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
+import { AppShell } from './components/layout/AppShell';
+import { Typography } from './components/ui/Typography';
 
 // Helper to format bytes
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -211,113 +213,97 @@ const App: React.FC = () => {
         requiresPassword
     );
 
-    return (
-        <div className="min-h-screen w-full flex flex-col items-center py-8 px-4 relative">
-            <Toast notification={notification} />
-
-            {/* Global Drop Overlay */}
-            {isDragging && (
-                <div className="fixed inset-0 z-[999] bg-surface/90 backdrop-blur-md flex flex-col items-center justify-center border-4 border-primary border-dashed m-4 rounded-[32px] animate-pulse">
-                    <div className="bg-primary/20 p-8 rounded-full mb-6">
-                        <IconFilePlus className="w-16 h-16 text-primary" />
-                    </div>
-                    <h2 className="text-4xl font-bold text-white font-brand">Drop Image Here</h2>
-                    <p className="text-outline mt-4 text-lg">Release to upload instantly</p>
-                </div>
-            )}
-
-            <header className="w-full max-w-5xl flex justify-between items-center mb-10">
-                <div className="flex items-center gap-3">
-                    <div className="bg-primary text-on-primary p-2.5 rounded-xl">
-                        <IconBlinkingEye className="w-6 h-6" />
-                    </div>
-                    <h1 className="text-3xl font-bold font-brand text-white">Dont<span className="text-primary">See</span></h1>
-                </div>
-            </header>
-
-            <main className="w-full max-w-5xl bg-surface-container border border-secondary-container rounded-[32px] overflow-hidden shadow-xl flex flex-col md:flex-row">
-                
-                <div className="md:w-1/3 bg-surface-raised p-8 flex flex-col border-b md:border-b-0 md:border-r border-secondary-container justify-center min-h-[200px]">
-                    {/* Unified Header: No Tabs */}
-                    <div className="flex flex-col gap-4">
-                        <h2 className="text-3xl font-bold text-white font-brand transition-all duration-300 animate-slide-up" key={headerTitle}>
-                            {headerTitle}
-                        </h2>
-                        <p className="text-white/70 text-sm leading-relaxed animate-slide-up" key={headerDesc}>
-                            {headerDesc}
-                        </p>
-                    </div>
-                </div>
-
-                <div className="flex-1 p-8 flex flex-col relative">
-                    
-                    <ImagePreview 
-                        image={image} 
-                        hasSignature={hasSignature} 
-                        requiresPassword={requiresPassword}
-                        onReset={reset} 
-                        onFileSelect={handleFileSelect} 
-                        onFileDrop={handleFileDrop}
-                        isLoading={isReading || isScanning}
-                    />
-
-                    {(image || isScanning || isReading) && (
-                        <div className="flex-1 flex flex-col gap-5 animate-slide-up mt-8">
-                            
-                            {(isScanning || isReading) ? (
-                                <div className="flex-1 flex items-center justify-center h-full min-h-[200px]">
-                                    <div className="flex flex-col items-center gap-3">
-                                        <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
-                                        <p className="text-outline text-sm font-mono">
-                                            {isReading ? "Decoding image data..." : "Scanning for signature..."}
-                                        </p>
-                                    </div>
-                                </div>
-                            ) : (image && (
-                                mode === AppMode.HIDE ? (
-                                    <ConcealView
-                                        image={image}
-                                        message={message}
-                                        setMessage={setMessage}
-                                        password={password}
-                                        setPassword={setPassword}
-                                        maxBytes={maxBytes}
-                                        currentBytes={currentBytes}
-                                        isProcessing={isProcessing}
-                                        stage={stage}
-                                        progress={progress}
-                                        resultBlobUrl={resultBlobUrl}
-                                        resultSize={resultSize}
-                                        onEncode={processEncode}
-                                        getButtonLabel={getButtonLabel}
-                                        formatBytes={formatBytes}
-                                    />
-                                ) : (
-                                    <RevealView
-                                        image={image}
-                                        password={password}
-                                        setPassword={setPassword}
-                                        decodedMessage={decodedMessage}
-                                        requiresPassword={requiresPassword}
-                                        hasSignature={hasSignature}
-                                        isProcessing={isProcessing}
-                                        stage={stage}
-                                        progress={progress}
-                                        onDecode={processDecode}
-                                        onReConceal={handleReConceal}
-                                        getButtonLabel={getButtonLabel}
-                                    />
-                                ))
-                            )}
-                        </div>
-                    )}
-                </div>
-            </main>
-
-            <footer className="mt-12 text-center flex items-center justify-center gap-2 text-outline text-sm font-medium font-brand">
-                Crafted with <IconHeart className="w-4 h-4 text-primary" /> by Ayush
-            </footer>
+    const dragOverlayContent = isDragging ? (
+        <div className="fixed inset-0 z-[999] bg-surface/90 backdrop-blur-md flex flex-col items-center justify-center border-4 border-primary border-dashed m-4 rounded-[32px] animate-pulse">
+            <div className="bg-primary/20 p-8 rounded-full mb-6">
+                <IconFilePlus className="w-16 h-16 text-primary" />
+            </div>
+            <Typography variant="h1" className="text-4xl">Drop Image Here</Typography>
+            <Typography variant="body" className="text-outline mt-4 text-lg">Release to upload instantly</Typography>
         </div>
+    ) : null;
+
+    return (
+        <AppShell
+            showToast={<Toast notification={notification} />}
+            dragOverlay={dragOverlayContent}
+        >
+            <div className="md:w-1/3 bg-surface-raised p-8 flex flex-col border-b md:border-b-0 md:border-r border-secondary-container justify-center min-h-[200px]">
+                {/* Unified Header: No Tabs */}
+                <div className="flex flex-col gap-4">
+                    <Typography variant="h1" className="transition-all duration-300 animate-slide-up" key={headerTitle}>
+                        {headerTitle}
+                    </Typography>
+                    <Typography variant="body" className="text-sm animate-slide-up" key={headerDesc}>
+                        {headerDesc}
+                    </Typography>
+                </div>
+            </div>
+
+            <div className="flex-1 p-8 flex flex-col relative">
+                
+                <ImagePreview
+                    image={image}
+                    hasSignature={hasSignature}
+                    requiresPassword={requiresPassword}
+                    onReset={reset}
+                    onFileSelect={handleFileSelect}
+                    onFileDrop={handleFileDrop}
+                    isLoading={isReading || isScanning}
+                />
+
+                {(image || isScanning || isReading) && (
+                    <div className="flex-1 flex flex-col gap-5 animate-slide-up mt-8">
+
+                        {(isScanning || isReading) ? (
+                            <div className="flex-1 flex items-center justify-center h-full min-h-[200px]">
+                                <div className="flex flex-col items-center gap-3">
+                                    <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+                                    <Typography variant="caption">
+                                        {isReading ? "Decoding image data..." : "Scanning for signature..."}
+                                    </Typography>
+                                </div>
+                            </div>
+                        ) : (image && (
+                            mode === AppMode.HIDE ? (
+                                <ConcealView
+                                    image={image}
+                                    message={message}
+                                    setMessage={setMessage}
+                                    password={password}
+                                    setPassword={setPassword}
+                                    maxBytes={maxBytes}
+                                    currentBytes={currentBytes}
+                                    isProcessing={isProcessing}
+                                    stage={stage}
+                                    progress={progress}
+                                    resultBlobUrl={resultBlobUrl}
+                                    resultSize={resultSize}
+                                    onEncode={processEncode}
+                                    getButtonLabel={getButtonLabel}
+                                    formatBytes={formatBytes}
+                                />
+                            ) : (
+                                <RevealView
+                                    image={image}
+                                    password={password}
+                                    setPassword={setPassword}
+                                    decodedMessage={decodedMessage}
+                                    requiresPassword={requiresPassword}
+                                    hasSignature={hasSignature}
+                                    isProcessing={isProcessing}
+                                    stage={stage}
+                                    progress={progress}
+                                    onDecode={processDecode}
+                                    onReConceal={handleReConceal}
+                                    getButtonLabel={getButtonLabel}
+                                />
+                            ))
+                        )}
+                    </div>
+                )}
+            </div>
+        </AppShell>
     );
 };
 

@@ -3,8 +3,29 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Core Surface Colors */
+    --color-surface: 20 18 24;           /* #141218 */
+    --color-surface-container: 29 27 32; /* #1d1b20 */
+    --color-surface-raised: 43 41 48;    /* #2b2930 */
+    --color-surface-error: 63 46 77;     /* #3f2e4d */
+
+    /* Primary Accent */
+    --color-primary: 208 188 255;        /* #d0bcff */
+    --color-on-primary: 56 30 114;       /* #381e72 */
+
+    /* Secondary / UI Elements */
+    --color-secondary-container: 74 68 88; /* #4a4458 */
+    --color-secondary-hover: 92 86 107;    /* #5c566b */
+    --color-outline: 147 143 153;          /* #938f99 */
+
+    /* Error States */
+    --color-error: 242 184 181;          /* #f2b8b5 */
+    --color-error-container: 140 29 24;  /* #8c1d18 */
+  }
+
   body {
-    background-color: #141218;
+    background-color: rgb(var(--color-surface));
     color: #e6e1e5;
     -webkit-tap-highlight-color: transparent;
   }
@@ -14,13 +35,13 @@
     width: 8px;
   }
   ::-webkit-scrollbar-track {
-    background: #141218;
+    background: rgb(var(--color-surface));
   }
   ::-webkit-scrollbar-thumb {
-    background: #4a4458;
+    background: rgb(var(--color-secondary-container));
     border-radius: 4px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #d0bcff;
+    background: rgb(var(--color-primary));
   }
 }

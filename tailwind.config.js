@@ -11,17 +11,21 @@ export default {
         brand: ['Outfit', 'sans-serif'],
       },
       colors: {
-        surface: '#141218',
-        'surface-container': '#1d1b20',
-        'surface-raised': '#2b2930', // New
-        'surface-error': '#3f2e4d', // New
-        primary: '#d0bcff',
-        'on-primary': '#381e72',
-        'secondary-container': '#4a4458',
-        'secondary-hover': '#5c566b', // New
-        outline: '#938f99',
-        error: '#f2b8b5',
-        'error-container': '#8c1d18',
+        surface: 'rgb(var(--color-surface) / <alpha-value>)',
+        'surface-container': 'rgb(var(--color-surface-container) / <alpha-value>)',
+        'surface-raised': 'rgb(var(--color-surface-raised) / <alpha-value>)',
+        'surface-error': 'rgb(var(--color-surface-error) / <alpha-value>)',
+
+        primary: 'rgb(var(--color-primary) / <alpha-value>)',
+        'on-primary': 'rgb(var(--color-on-primary) / <alpha-value>)',
+
+        'secondary-container': 'rgb(var(--color-secondary-container) / <alpha-value>)',
+        'secondary-hover': 'rgb(var(--color-secondary-hover) / <alpha-value>)',
+
+        outline: 'rgb(var(--color-outline) / <alpha-value>)',
+
+        error: 'rgb(var(--color-error) / <alpha-value>)',
+        'error-container': 'rgb(var(--color-error-container) / <alpha-value>)',
       },
       animation: {
         'slide-down': 'slideDown 0.4s cubic-bezier(0.2, 0, 0.2, 1) forwards',

@@ -2,6 +2,10 @@ import React from 'react';
 import { IconLock, IconDownload, IconEyeOff } from './Icons';
 import { AppImage, ProcessingStage } from '../types';
 import { ExpandableTextarea } from './ExpandableTextarea';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
+import { Typography } from './ui/Typography';
+import { cn } from '../utils/cn';
 
 interface ConcealViewProps {
     image: AppImage | null;
@@ -55,13 +59,16 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
         <div className="flex items-center gap-3 w-full">
             <div className="flex-1 h-1.5 bg-surface rounded-full overflow-hidden">
                 <div
-                    className={`h-full transition-all duration-300 ${isOverLimit ? 'bg-error' : 'bg-primary'}`}
+                    className={cn(
+                        "h-full transition-all duration-300",
+                        isOverLimit ? 'bg-error' : 'bg-primary'
+                    )}
                     style={{ width: `${usagePercent}%` }}
                 ></div>
             </div>
-            <span className={`text-xs font-mono ${isOverLimit ? 'text-error font-bold' : 'text-outline'}`}>
+            <Typography variant="caption" className={isOverLimit ? 'text-error font-bold' : ''}>
                 {currentBytes} / {maxBytes} bytes
-            </span>
+            </Typography>
         </div>
     );
 
@@ -72,8 +79,12 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     placeholder="Enter secret message here..."
-                    className={`flex-1 bg-surface border text-white rounded-2xl focus:outline-none focus:ring-1 transition-colors placeholder-outline min-h-[120px]
-                    ${isOverLimit ? 'border-error focus:border-error focus:ring-error' : 'border-secondary-container focus:border-primary focus:ring-primary'}`}
+                    className={cn(
+                        "flex-1 min-h-[120px] bg-surface border text-white rounded-2xl focus:outline-none focus:ring-1 transition-colors placeholder-outline",
+                        isOverLimit
+                            ? 'border-error focus:border-error focus:ring-error'
+                            : 'border-secondary-container focus:border-primary focus:ring-primary'
+                    )}
                     footer={footerContent}
                 />
 
@@ -82,32 +93,27 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                 </div>
 
                 {maxBytes === 0 && (
-                    <p className="text-xs text-error font-bold px-1 animate-slide-up">
+                    <Typography variant="caption" className="text-error font-bold px-1 animate-slide-up">
                         Image too small to hide data. Please upload a larger image.
-                    </p>
+                    </Typography>
                 )}
             </div>
 
-            <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <IconLock className="text-outline" />
-                </div>
-                <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Set Password (Optional)"
-                    className="w-full bg-surface border border-secondary-container text-white text-sm rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder-outline"
-                />
-            </div>
+            <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Set Password (Optional)"
+                startIcon={<IconLock className="w-5 h-5" />}
+            />
 
             {resultBlobUrl ? (
                 <div className="animate-slide-up bg-surface-raised border border-secondary-container p-4 rounded-2xl flex items-center justify-between">
                     <div className="flex flex-col justify-center max-w-[70%]">
-                        <p className="text-white font-bold text-sm mb-0.5 truncate" title={downloadName}>
+                        <Typography variant="label" className="text-white mb-0.5 truncate" title={downloadName}>
                             {downloadName}
-                        </p>
-                        <p className="text-outline text-xs font-mono">{formatBytes(resultSize)}</p>
+                        </Typography>
+                        <Typography variant="caption">{formatBytes(resultSize)}</Typography>
                     </div>
                     <a
                         href={resultBlobUrl}
@@ -119,27 +125,26 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                     </a>
                 </div>
             ) : (
-                <button onClick={() => image && onEncode(image)} disabled={isProcessing || !message || isOverLimit}
-                    aria-label="Encrypt and conceal message"
-                    className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2 relative overflow-hidden
-                    ${(!message || isOverLimit) ? 'bg-surface-container text-secondary-container border border-secondary-container cursor-not-allowed' : 'bg-primary hover:bg-white text-on-primary shadow-primary/10'}`}>
+                <div className="relative overflow-hidden rounded-2xl">
+                     <Button
+                        onClick={() => image && onEncode(image)}
+                        disabled={isProcessing || !message || isOverLimit}
+                        isLoading={isProcessing}
+                        loadingText={getButtonLabel()}
+                        icon={!isProcessing && <IconEyeOff className="w-5 h-5" />}
+                        className="w-full"
+                    >
+                        {!isProcessing && "Conceal"}
+                    </Button>
 
-                    {isProcessing ? (
-                        <div className="flex items-center gap-2 z-10 relative">
-                            <div className="w-5 h-5 border-4 border-on-primary/30 border-t-on-primary rounded-full animate-spin-slow" aria-label="Processing"></div>
-                            <span>{getButtonLabel()}</span>
-                        </div>
-                    ) : (
-                        <><IconEyeOff className="w-5 h-5"/> Conceal</>
-                    )}
-
+                    {/* Progress Bar Overlays */}
                     {isProcessing && stage === 'processing' && (
-                        <div className="absolute inset-0 bg-white/20 z-0 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }}></div>
+                        <div className="absolute inset-0 bg-white/20 z-20 pointer-events-none transition-all duration-100 ease-linear mix-blend-overlay" style={{ width: `${progress}%` }}></div>
                     )}
                     {isProcessing && stage !== 'processing' && (
-                        <div className="absolute inset-0 bg-white/10 z-0 animate-pulse"></div>
+                         <div className="absolute inset-0 bg-white/10 z-20 pointer-events-none animate-pulse mix-blend-overlay"></div>
                     )}
-                </button>
+                </div>
             )}
         </>
     );
