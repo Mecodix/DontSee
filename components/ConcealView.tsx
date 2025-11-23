@@ -72,6 +72,11 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                         {currentBytes} / {maxBytes} bytes
                     </span>
                 </div>
+                {maxBytes === 0 && (
+                    <p className="text-xs text-error font-bold px-1 animate-slide-up">
+                        Image too small to hide data. Please upload a larger image.
+                    </p>
+                )}
             </div>
 
             <div className="relative">
