@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #141218;
+    color: #e6e1e5;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Custom scrollbar for aesthetics */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #141218;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #4a4458;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #d0bcff;
+  }
+}
