@@ -1,13 +1,16 @@
 import React from 'react';
-import { IconLock, IconZap } from './Icons';
+import { Lock, Unlock, RefreshCw, Key, ShieldCheck, Copy, Check } from 'lucide-react';
 import { AppImage, ProcessingStage } from '../types';
-import { ExpandableTextarea } from './ExpandableTextarea';
+import { Input } from './ui/Input';
+import { Button } from './ui/Button';
+import { Textarea } from './ui/Textarea';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface RevealViewProps {
     image: AppImage | null;
     password: string;
     setPassword: (pwd: string) => void;
-    decodedMessage: string;
+    decodedMessage: string | null;
     requiresPassword: boolean;
     hasSignature: boolean;
     isProcessing: boolean;
@@ -32,59 +35,107 @@ export const RevealView: React.FC<RevealViewProps> = ({
     onReConceal,
     getButtonLabel
 }) => {
-    return (
-        <>
-            {requiresPassword && (
-                <div className="relative animate-slide-up">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                        <IconLock className="text-outline" />
-                    </div>
-                    <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Enter Password to Unlock"
-                        className="w-full bg-surface border border-secondary-container text-white text-sm rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder-outline"
-                    />
-                </div>
-            )}
+    const [copied, setCopied] = React.useState(false);
 
-            {decodedMessage && (
-                <ExpandableTextarea
-                    value={decodedMessage}
-                    readOnly
-                    className="bg-surface-container border-primary/50 text-primary font-mono text-sm rounded-2xl focus:outline-none focus:ring-1 transition-colors animate-slide-up"
-                    maxHeight="h-40"
-                    placeholder="Decoded message will appear here..."
+    const handleCopy = () => {
+        if (decodedMessage) {
+            navigator.clipboard.writeText(decodedMessage);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
+
+    if (decodedMessage !== null) {
+        return (
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col gap-6 h-full"
+            >
+                <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl">
+                    <div className="bg-emerald-500/20 p-2 rounded-full">
+                        <ShieldCheck className="w-6 h-6 text-emerald-400" />
+                    </div>
+                    <div>
+                        <h3 className="text-emerald-200 font-bold text-sm">Decryption Successful</h3>
+                        <p className="text-emerald-200/60 text-xs">The hidden message has been fully recovered.</p>
+                    </div>
+                </div>
+
+                <div className="relative flex-1">
+                    <Textarea
+                        value={decodedMessage}
+                        readOnly
+                        className="font-mono text-sm min-h-[200px] bg-black/20"
+                    />
+                    <div className="absolute top-2 right-12 z-10">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleCopy}
+                            className="h-8 w-8 p-0 hover:bg-white/10"
+                            title="Copy to clipboard"
+                        >
+                            {copied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="flex gap-4 pt-4 border-t border-white/5">
+                    <Button
+                        onClick={onReConceal}
+                        variant="secondary"
+                        className="flex-1"
+                        leftIcon={<RefreshCw size={18} />}
+                    >
+                        Hide New Message
+                    </Button>
+                </div>
+            </motion.div>
+        );
+    }
+
+    return (
+        <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+                 <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                    {requiresPassword ? <Lock className="text-amber-400" /> : <Unlock className="text-emerald-400" />}
+                    {requiresPassword ? "Locked Message Detected" : "Message Detected"}
+                 </h3>
+                 <p className="text-white/50 text-sm">
+                    {requiresPassword
+                        ? "This image contains a password-protected message. Enter the correct password to decrypt it."
+                        : "A hidden message has been found. Click reveal to decrypt it."}
+                 </p>
+            </div>
+
+            {requiresPassword && (
+                <Input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter Decryption Password"
+                    leftIcon={<Key size={18} />}
+                    autoFocus
                 />
             )}
 
-            <button onClick={() => image && onDecode(image)} disabled={isProcessing || !hasSignature}
-                className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2 relative overflow-hidden
-                ${isProcessing || !hasSignature ? 'bg-secondary-container text-outline cursor-not-allowed' : 'bg-secondary-container hover:bg-secondary-hover text-white shadow-secondary-container/20'}`}>
+            <Button
+                onClick={() => image && onDecode(image)}
+                disabled={isProcessing || (requiresPassword && !password)}
+                isLoading={isProcessing}
+                variant="primary"
+                size="lg"
+                className="w-full mt-4"
+                leftIcon={!isProcessing && <Unlock size={20} />}
+            >
+                {isProcessing ? getButtonLabel() : "Reveal Message"}
+            </Button>
 
-                {isProcessing ? (
-                    <div className="flex items-center gap-2 z-10 relative">
-                        <div className="w-5 h-5 border-4 border-white/30 border-t-white rounded-full animate-spin-slow"></div>
-                        <span>{getButtonLabel()}</span>
-                    </div>
-                ) : (
-                    <><IconZap className="w-5 h-5"/> Reveal</>
-                )}
-
-                {isProcessing && stage === 'processing' && (
-                    <div className="absolute inset-0 bg-white/10 z-0 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }}></div>
-                )}
-                {isProcessing && stage !== 'processing' && (
-                    <div className="absolute inset-0 bg-white/5 z-0 animate-pulse"></div>
-                )}
-            </button>
-
-            <div className="w-full text-center mt-4 animate-slide-up">
-                <button onClick={onReConceal} className="text-sm text-outline hover:text-primary transition-colors">
-                    Want to use this image again? <strong>Re-Conceal</strong>
-                </button>
-            </div>
-        </>
+            {/* Disclaimer */}
+            <p className="text-center text-xs text-white/30 mt-2">
+                Decryption occurs locally in your browser.
+            </p>
+        </div>
     );
 };

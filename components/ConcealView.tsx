@@ -1,7 +1,11 @@
 import React from 'react';
-import { IconLock, IconDownload, IconEyeOff } from './Icons';
+import { Lock, Download, EyeOff, Check, AlertCircle } from 'lucide-react';
 import { AppImage, ProcessingStage } from '../types';
-import { ExpandableTextarea } from './ExpandableTextarea';
+import { Textarea } from './ui/Textarea';
+import { Input } from './ui/Input';
+import { Button } from './ui/Button';
+import { Card } from './ui/Card';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface ConcealViewProps {
     image: AppImage | null;
@@ -52,95 +56,116 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
     const downloadName = getDownloadName();
 
     const footerContent = (
-        <div className="flex items-center gap-3 w-full">
-            <div className="flex-1 h-1.5 bg-surface rounded-full overflow-hidden">
-                <div
-                    className={`h-full transition-all duration-300 ${isOverLimit ? 'bg-error' : 'bg-primary'}`}
-                    style={{ width: `${usagePercent}%` }}
-                ></div>
+        <div className="flex flex-col gap-2 w-full mt-2">
+            <div className="flex justify-between items-end">
+                 <span className={`text-xs font-mono transition-colors ${isOverLimit ? 'text-red-400 font-bold' : 'text-white/40'}`}>
+                    {formatBytes(currentBytes)} / {formatBytes(maxBytes)}
+                </span>
+                <span className="text-xs text-white/20">{Math.round(usagePercent)}%</span>
             </div>
-            <span className={`text-xs font-mono ${isOverLimit ? 'text-error font-bold' : 'text-outline'}`}>
-                {currentBytes} / {maxBytes} bytes
-            </span>
+            <div className="flex-1 h-1.5 bg-surface-raised rounded-full overflow-hidden border border-white/5">
+                <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${usagePercent}%` }}
+                    transition={{ type: "spring", stiffness: 100, damping: 20 }}
+                    className={`h-full ${isOverLimit ? 'bg-red-500' : 'bg-primary'}`}
+                />
+            </div>
         </div>
     );
 
     return (
-        <>
-            <div className="flex flex-col gap-2">
-                <ExpandableTextarea
+        <div className="flex flex-col gap-6">
+            <div className="space-y-4">
+                <Textarea
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Enter secret message here..."
-                    className={`flex-1 bg-surface border text-white rounded-2xl focus:outline-none focus:ring-1 transition-colors placeholder-outline min-h-[120px]
-                    ${isOverLimit ? 'border-error focus:border-error focus:ring-error' : 'border-secondary-container focus:border-primary focus:ring-primary'}`}
+                    placeholder="Enter the secret message you want to hide..."
+                    className={isOverLimit ? "border-red-500/50 focus:border-red-500" : ""}
                     footer={footerContent}
                 />
 
-                <div className="px-1">
-                    {footerContent}
-                </div>
-
-                {maxBytes === 0 && (
-                    <p className="text-xs text-error font-bold px-1 animate-slide-up">
-                        Image too small to hide data. Please upload a larger image.
-                    </p>
-                )}
+                <AnimatePresence>
+                    {maxBytes === 0 && (
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-start gap-3"
+                        >
+                            <AlertCircle className="text-red-400 w-5 h-5 flex-shrink-0" />
+                            <p className="text-sm text-red-200">
+                                Image too small to hide data. Please upload a larger image.
+                            </p>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
 
-            <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <IconLock className="text-outline" />
-                </div>
-                <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Set Password (Optional)"
-                    className="w-full bg-surface border border-secondary-container text-white text-sm rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder-outline"
-                />
-            </div>
+            <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Encryption Password (Optional)"
+                leftIcon={<Lock size={18} />}
+            />
 
-            {resultBlobUrl ? (
-                <div className="animate-slide-up bg-surface-raised border border-secondary-container p-4 rounded-2xl flex items-center justify-between">
-                    <div className="flex flex-col justify-center max-w-[70%]">
-                        <p className="text-white font-bold text-sm mb-0.5 truncate" title={downloadName}>
-                            {downloadName}
-                        </p>
-                        <p className="text-outline text-xs font-mono">{formatBytes(resultSize)}</p>
-                    </div>
-                    <a
-                        href={resultBlobUrl}
-                        download={downloadName}
-                        className="w-12 h-12 bg-primary hover:bg-white text-on-primary rounded-full flex items-center justify-center transition-transform active:scale-95 shadow-lg flex-shrink-0"
-                        aria-label="Download encoded image"
+            <AnimatePresence mode="wait">
+                {resultBlobUrl ? (
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
                     >
-                        <IconDownload className="w-6 h-6" />
-                    </a>
-                </div>
-            ) : (
-                <button onClick={() => image && onEncode(image)} disabled={isProcessing || !message || isOverLimit}
-                    aria-label="Encrypt and conceal message"
-                    className={`py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2 relative overflow-hidden
-                    ${(!message || isOverLimit) ? 'bg-surface-container text-secondary-container border border-secondary-container cursor-not-allowed' : 'bg-primary hover:bg-white text-on-primary shadow-primary/10'}`}>
+                        <Card variant="solid" className="p-4 flex items-center justify-between border-primary/20 bg-primary/5">
+                            <div className="flex flex-col justify-center max-w-[70%]">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <div className="bg-emerald-500/20 p-1 rounded-full">
+                                        <Check size={12} className="text-emerald-400" />
+                                    </div>
+                                    <p className="text-white font-bold text-sm truncate" title={downloadName}>
+                                        {downloadName}
+                                    </p>
+                                </div>
+                                <p className="text-white/50 text-xs font-mono pl-7">{formatBytes(resultSize)}</p>
+                            </div>
+                            <Button
+                                href={resultBlobUrl}
+                                as="a"
+                                download={downloadName}
+                                variant="primary"
+                                size="sm"
+                                className="rounded-full w-12 h-12 p-0 flex items-center justify-center"
+                                leftIcon={<Download size={20} />}
+                            />
+                        </Card>
+                    </motion.div>
+                ) : (
+                    <Button
+                        onClick={() => image && onEncode(image)}
+                        disabled={isProcessing || !message || isOverLimit}
+                        isLoading={isProcessing}
+                        variant={(!message || isOverLimit) ? "secondary" : "primary"}
+                        size="lg"
+                        className="w-full relative overflow-hidden group"
+                        leftIcon={!isProcessing && <EyeOff size={20} />}
+                    >
+                        {isProcessing ? (
+                           <span className="relative z-10">{getButtonLabel()}</span>
+                        ) : "Conceal Message"}
 
-                    {isProcessing ? (
-                        <div className="flex items-center gap-2 z-10 relative">
-                            <div className="w-5 h-5 border-4 border-on-primary/30 border-t-on-primary rounded-full animate-spin-slow" aria-label="Processing"></div>
-                            <span>{getButtonLabel()}</span>
-                        </div>
-                    ) : (
-                        <><IconEyeOff className="w-5 h-5"/> Conceal</>
-                    )}
-
-                    {isProcessing && stage === 'processing' && (
-                        <div className="absolute inset-0 bg-white/20 z-0 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }}></div>
-                    )}
-                    {isProcessing && stage !== 'processing' && (
-                        <div className="absolute inset-0 bg-white/10 z-0 animate-pulse"></div>
-                    )}
-                </button>
-            )}
-        </>
+                        {/* Progress Bar Background */}
+                        {isProcessing && stage === 'processing' && (
+                            <motion.div
+                                className="absolute inset-0 bg-black/10 z-0 origin-left"
+                                initial={{ scaleX: 0 }}
+                                animate={{ scaleX: progress / 100 }}
+                                transition={{ type: "spring", stiffness: 100, damping: 20 }}
+                            />
+                        )}
+                    </Button>
+                )}
+            </AnimatePresence>
+        </div>
     );
 };

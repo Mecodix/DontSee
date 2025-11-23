@@ -1,21 +1,44 @@
 import React from 'react';
-import { NotificationState } from '../types';
-import { IconCheck, IconX } from './Icons';
+import { AppNotification } from '../types';
+import { motion, AnimatePresence } from 'framer-motion';
+import { AlertCircle, CheckCircle, Info, XCircle, X } from 'lucide-react';
+import { cn } from '../utils/cn';
 
 interface ToastProps {
-    notification: NotificationState | null;
+    notification: AppNotification | null;
 }
 
 export const Toast: React.FC<ToastProps> = ({ notification }) => {
-    if (!notification) return null;
-
-    const isError = notification.type === 'error';
-
     return (
-        <div className={`fixed top-10 left-1/2 transform -translate-x-1/2 px-6 py-4 rounded-2xl shadow-2xl z-[1000] animate-slide-down flex items-center gap-3 min-w-[320px] border backdrop-blur-md
-            ${isError ? 'bg-surface-error text-error border-error-container' : 'bg-surface-raised text-primary border-secondary-container'}`}>
-            {isError ? <IconX className="shrink-0" /> : <IconCheck className="shrink-0" />}
-            <p className="text-sm font-medium">{notification.msg}</p>
-        </div>
+        <AnimatePresence>
+            {notification && (
+                <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[1000] w-full max-w-sm pointer-events-none px-4">
+                     <motion.div
+                        initial={{ opacity: 0, y: -20, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -20, scale: 0.9 }}
+                        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                        className={cn(
+                            "pointer-events-auto flex items-center gap-3 p-4 rounded-2xl shadow-2xl backdrop-blur-xl border text-sm font-medium",
+                            notification.type === 'error' && "bg-red-500/10 border-red-500/20 text-red-200",
+                            notification.type === 'success' && "bg-emerald-500/10 border-emerald-500/20 text-emerald-200",
+                            notification.type === 'info' && "bg-blue-500/10 border-blue-500/20 text-blue-200"
+                        )}
+                     >
+                        {notification.type === 'error' && <XCircle className="w-5 h-5 flex-shrink-0" />}
+                        {notification.type === 'success' && <CheckCircle className="w-5 h-5 flex-shrink-0" />}
+                        {notification.type === 'info' && <Info className="w-5 h-5 flex-shrink-0" />}
+
+                        <p className="flex-1">{notification.message}</p>
+
+                        {/*
+                           Note: The current Toast logic in useSteganography auto-clears.
+                           If manual dismiss is needed, we'd need a callback here.
+                           For now, visually this is enough.
+                        */}
+                    </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
     );
 };

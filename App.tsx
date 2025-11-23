@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { AppMode, AppImage } from './types';
-import { IconBlinkingEye, IconHeart, IconFilePlus } from './components/Icons';
 import { Toast } from './components/Toast';
 import { ImagePreview } from './components/ImagePreview';
 import { ConcealView } from './components/ConcealView';
@@ -10,6 +9,8 @@ import { useImageHandler } from './hooks/useImageHandler';
 import { useSteganography } from './hooks/useSteganography';
 import { usePasteHandler } from './hooks/usePasteHandler';
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
+import { Eye, Heart, Sparkles } from 'lucide-react';
+import { cn } from './utils/cn';
 
 // Helper to format bytes
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -21,57 +22,10 @@ const formatBytes = (bytes: number, decimals = 2) => {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };
 
-// Helper: Get Header Content
-const getHeaderContent = (
-    isReading: boolean,
-    isScanning: boolean,
-    image: AppImage | null,
-    mode: AppMode,
-    requiresPassword: boolean
-) => {
-    if (isReading) {
-        return {
-            title: "Reading Image...",
-            desc: "Decoding image data..."
-        };
-    }
-    if (isScanning) {
-        return {
-            title: "Analyzing Image...",
-            desc: "Please wait while we check for hidden messages..."
-        };
-    }
-    if (!image) {
-        return {
-            title: "Hide or Reveal Secrets",
-            desc: "Upload a DontSee image to decrypt, or any image to hide a new message."
-        };
-    }
-    if (mode === AppMode.HIDE) {
-        return {
-            title: "Conceal Text",
-            desc: "Hide text inside images using steganography. Optionally add a password for AES-GCM encryption."
-        };
-    }
-    // Reveal Mode
-    if (requiresPassword) {
-        return {
-            title: "Locked Message",
-            desc: "Locked message detected. Enter password to reconstruct the scattered data."
-        };
-    }
-    return {
-        title: "Reveal Secret",
-        desc: "Hidden message found. Click Reveal to read the secret."
-    };
-};
-
 const App: React.FC = () => {
-    const [mode, setMode] = useState<AppMode>(AppMode.HIDE);
-    // Local scanning state to prevent flickering on upload
-    const [isScanning, setIsScanning] = useState(false);
-    // New state for browser decoding phase
-    const [isReading, setIsReading] = useState(false);
+    const [mode, setMode] = React.useState<AppMode>(AppMode.HIDE);
+    const [isScanning, setIsScanning] = React.useState(false);
+    const [isReading, setIsReading] = React.useState(false);
 
     const { image, processFile, resetImage } = useImageHandler();
 
@@ -88,7 +42,7 @@ const App: React.FC = () => {
         hasSignature,
         requiresPassword,
         maxBytes,
-        setMaxBytes, // Exposed for manual override
+        setMaxBytes,
         processEncode,
         processDecode,
         handleImageScan,
@@ -99,15 +53,14 @@ const App: React.FC = () => {
     const reset = () => {
         resetImage();
         resetStegoState();
-        setMode(AppMode.HIDE); // Reset to default mode
+        setMode(AppMode.HIDE);
         setIsScanning(false);
         setIsReading(false);
     };
 
-    // Handle Auto-Switch Logic based on Scan
     const onImageLoaded = async (img: HTMLImageElement) => {
-        setIsReading(false); // Image is fully loaded in DOM
-        setIsScanning(true); // Start analyzing signature
+        setIsReading(false);
+        setIsScanning(true);
         try {
             await handleImageScan(img, mode);
         } finally {
@@ -115,7 +68,6 @@ const App: React.FC = () => {
         }
     };
 
-    // "Smart Drop" Logic: Auto-switch when signature state is determined
     React.useEffect(() => {
         if (image && hasSignature && !isScanning) {
             setMode(AppMode.SEE);
@@ -125,30 +77,9 @@ const App: React.FC = () => {
     }, [hasSignature, image, isScanning]);
 
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            // Immediate feedback: Set reading to true
-            setIsReading(true);
-            resetStegoState();
-
-            processFile(
-                file,
-                (img) => onImageLoaded(img),
-                (msg) => {
-                    notify('error', msg || 'Failed to load image');
-                    setIsReading(false);
-                }
-            );
-        }
-        e.target.value = '';
-    };
-
-    const handleFileDrop = (file: File) => {
-        // Immediate feedback: Set reading to true
+    const handleFileProcess = (file: File) => {
         setIsReading(true);
         resetStegoState();
-
         processFile(
             file,
             (img) => onImageLoaded(img),
@@ -159,25 +90,18 @@ const App: React.FC = () => {
         );
     };
 
-    // Hook up Global Drag & Drop
-    const { isDragging } = useGlobalDragDrop(handleFileDrop);
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            handleFileProcess(file);
+        }
+        e.target.value = '';
+    };
 
-    // Hook up Paste Handler
+    const { isDragging } = useGlobalDragDrop(handleFileProcess);
+
     usePasteHandler(
-        (file) => {
-             // Immediate feedback: Set reading to true
-            setIsReading(true);
-            resetStegoState();
-
-            processFile(
-                file,
-                (img) => onImageLoaded(img),
-                (msg) => {
-                    notify('error', msg || 'Failed to load pasted image');
-                    setIsReading(false);
-                }
-            );
-        },
+        (file) => handleFileProcess(file),
         (errorMsg) => notify('error', errorMsg)
     );
 
@@ -203,120 +127,137 @@ const App: React.FC = () => {
         return `${progress}%`;
     };
 
-    const { title: headerTitle, desc: headerDesc } = getHeaderContent(
-        isReading,
-        isScanning,
-        image,
-        mode,
-        requiresPassword
-    );
-
     return (
-        <div className="min-h-screen w-full flex flex-col items-center py-8 px-4 relative">
+        <div className="min-h-screen w-full bg-surface text-white selection:bg-primary/30 selection:text-white relative overflow-x-hidden font-sans">
+            {/* Ambient Background */}
+            <div className="fixed inset-0 z-0 bg-aurora opacity-40 pointer-events-none" />
+            <div className="fixed inset-0 z-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 contrast-150 pointer-events-none mix-blend-overlay" />
+
             <Toast notification={notification} />
 
             {/* Global Drop Overlay */}
-            {isDragging && (
-                <div className="fixed inset-0 z-[999] bg-surface/90 backdrop-blur-md flex flex-col items-center justify-center border-4 border-primary border-dashed m-4 rounded-[32px] animate-pulse">
-                    <div className="bg-primary/20 p-8 rounded-full mb-6">
-                        <IconFilePlus className="w-16 h-16 text-primary" />
-                    </div>
-                    <h2 className="text-4xl font-bold text-white font-brand">Drop Image Here</h2>
-                    <p className="text-outline mt-4 text-lg">Release to upload instantly</p>
+            <div className={cn(
+                "fixed inset-0 z-[999] bg-surface/90 backdrop-blur-xl flex flex-col items-center justify-center transition-all duration-300 pointer-events-none",
+                isDragging ? "opacity-100 scale-100" : "opacity-0 scale-95"
+            )}>
+                <div className="bg-primary/10 p-8 rounded-full mb-6 border border-primary/20 animate-bounce">
+                    <Sparkles className="w-16 h-16 text-primary" />
                 </div>
-            )}
+                <h2 className="text-4xl font-bold text-white font-brand">Drop Image Here</h2>
+            </div>
 
-            <header className="w-full max-w-5xl flex justify-between items-center mb-10">
-                <div className="flex items-center gap-3">
-                    <div className="bg-primary text-on-primary p-2.5 rounded-xl">
-                        <IconBlinkingEye className="w-6 h-6" />
-                    </div>
-                    <h1 className="text-3xl font-bold font-brand text-white">Dont<span className="text-primary">See</span></h1>
-                </div>
-            </header>
-
-            <main className="w-full max-w-5xl bg-surface-container border border-secondary-container rounded-[32px] overflow-hidden shadow-xl flex flex-col md:flex-row">
+            <div className="relative z-10 w-full max-w-5xl mx-auto px-6 py-12 flex flex-col min-h-screen">
                 
-                <div className="md:w-1/3 bg-surface-raised p-8 flex flex-col border-b md:border-b-0 md:border-r border-secondary-container justify-center min-h-[200px]">
-                    {/* Unified Header: No Tabs */}
-                    <div className="flex flex-col gap-4">
-                        <h2 className="text-3xl font-bold text-white font-brand transition-all duration-300 animate-slide-up" key={headerTitle}>
-                            {headerTitle}
-                        </h2>
-                        <p className="text-white/70 text-sm leading-relaxed animate-slide-up" key={headerDesc}>
-                            {headerDesc}
-                        </p>
-                    </div>
-                </div>
-
-                <div className="flex-1 p-8 flex flex-col relative">
-                    
-                    <ImagePreview 
-                        image={image} 
-                        hasSignature={hasSignature} 
-                        requiresPassword={requiresPassword}
-                        onReset={reset} 
-                        onFileSelect={handleFileSelect} 
-                        onFileDrop={handleFileDrop}
-                        isLoading={isReading || isScanning}
-                    />
-
-                    {(image || isScanning || isReading) && (
-                        <div className="flex-1 flex flex-col gap-5 animate-slide-up mt-8">
-                            
-                            {(isScanning || isReading) ? (
-                                <div className="flex-1 flex items-center justify-center h-full min-h-[200px]">
-                                    <div className="flex flex-col items-center gap-3">
-                                        <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
-                                        <p className="text-outline text-sm font-mono">
-                                            {isReading ? "Decoding image data..." : "Scanning for signature..."}
-                                        </p>
-                                    </div>
-                                </div>
-                            ) : (image && (
-                                mode === AppMode.HIDE ? (
-                                    <ConcealView
-                                        image={image}
-                                        message={message}
-                                        setMessage={setMessage}
-                                        password={password}
-                                        setPassword={setPassword}
-                                        maxBytes={maxBytes}
-                                        currentBytes={currentBytes}
-                                        isProcessing={isProcessing}
-                                        stage={stage}
-                                        progress={progress}
-                                        resultBlobUrl={resultBlobUrl}
-                                        resultSize={resultSize}
-                                        onEncode={processEncode}
-                                        getButtonLabel={getButtonLabel}
-                                        formatBytes={formatBytes}
-                                    />
-                                ) : (
-                                    <RevealView
-                                        image={image}
-                                        password={password}
-                                        setPassword={setPassword}
-                                        decodedMessage={decodedMessage}
-                                        requiresPassword={requiresPassword}
-                                        hasSignature={hasSignature}
-                                        isProcessing={isProcessing}
-                                        stage={stage}
-                                        progress={progress}
-                                        onDecode={processDecode}
-                                        onReConceal={handleReConceal}
-                                        getButtonLabel={getButtonLabel}
-                                    />
-                                ))
-                            )}
+                {/* Header */}
+                <header className="flex justify-between items-center mb-16">
+                    <div className="flex items-center gap-3 group cursor-default">
+                        <div className="bg-gradient-to-br from-primary to-purple-600 text-white p-2.5 rounded-xl shadow-lg shadow-primary/20 group-hover:scale-105 transition-transform duration-300">
+                            <Eye className="w-6 h-6" />
                         </div>
-                    )}
-                </div>
-            </main>
+                        <h1 className="text-3xl font-bold font-brand tracking-tight">
+                            Dont<span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-300">See</span>
+                        </h1>
+                    </div>
+                </header>
 
-            <footer className="mt-12 text-center flex items-center justify-center gap-2 text-outline text-sm font-medium font-brand">
-                Crafted with <IconHeart className="w-4 h-4 text-primary" /> by Ayush
-            </footer>
+                {/* Main Content */}
+                <main className="flex-1 w-full grid md:grid-cols-[1fr,1.5fr] gap-8 items-start">
+                    
+                    {/* Left Column: Image Preview & Status */}
+                    <div className="flex flex-col gap-6 sticky top-8">
+                        <div className="flex flex-col gap-2 mb-4">
+                            <h2 className="text-4xl font-bold font-brand leading-tight text-white">
+                                {isReading ? "Decoding..." :
+                                 isScanning ? "Scanning..." :
+                                 !image ? "Secure Steganography" :
+                                 mode === AppMode.HIDE ? "Conceal Secrets" : "Unlock Message"}
+                            </h2>
+                            <p className="text-lg text-white/50 leading-relaxed max-w-md">
+                                {isReading ? "Reading image data into memory." :
+                                 isScanning ? "Analyzing pixel structure for hidden signatures." :
+                                 !image ? "Hide messages inside images with military-grade encryption." :
+                                 mode === AppMode.HIDE ? "Encrypt and hide text within the image pixels." :
+                                 "Decrypt and reveal the hidden message."}
+                            </p>
+                        </div>
+
+                        <ImagePreview
+                            image={image}
+                            hasSignature={hasSignature}
+                            requiresPassword={requiresPassword}
+                            onReset={reset}
+                            onFileSelect={handleFileSelect}
+                            onFileDrop={handleFileProcess}
+                            isLoading={isReading || isScanning}
+                        />
+                    </div>
+
+                    {/* Right Column: Interaction Area */}
+                    <div className="relative min-h-[400px]">
+                        {(image || isScanning || isReading) ? (
+                             <div className="animate-slide-up">
+                                {(isScanning || isReading) ? (
+                                    <div className="w-full h-[400px] flex flex-col items-center justify-center border border-white/5 rounded-3xl bg-surface-glass backdrop-blur-xl">
+                                        <div className="relative">
+                                            <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <Sparkles size={20} className="text-primary animate-pulse" />
+                                            </div>
+                                        </div>
+                                        <p className="mt-6 text-sm font-mono text-white/50 uppercase tracking-widest">Processing</p>
+                                    </div>
+                                ) : (image && (
+                                    <div className="bg-surface-glass backdrop-blur-xl border border-white/10 rounded-[40px] p-8 shadow-2xl">
+                                        {mode === AppMode.HIDE ? (
+                                            <ConcealView
+                                                image={image}
+                                                message={message}
+                                                setMessage={setMessage}
+                                                password={password}
+                                                setPassword={setPassword}
+                                                maxBytes={maxBytes}
+                                                currentBytes={currentBytes}
+                                                isProcessing={isProcessing}
+                                                stage={stage}
+                                                progress={progress}
+                                                resultBlobUrl={resultBlobUrl}
+                                                resultSize={resultSize}
+                                                onEncode={processEncode}
+                                                getButtonLabel={getButtonLabel}
+                                                formatBytes={formatBytes}
+                                            />
+                                        ) : (
+                                            <RevealView
+                                                image={image}
+                                                password={password}
+                                                setPassword={setPassword}
+                                                decodedMessage={decodedMessage}
+                                                requiresPassword={requiresPassword}
+                                                hasSignature={hasSignature}
+                                                isProcessing={isProcessing}
+                                                stage={stage}
+                                                progress={progress}
+                                                onDecode={processDecode}
+                                                onReConceal={handleReConceal}
+                                                getButtonLabel={getButtonLabel}
+                                            />
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            // Empty State / Placeholder for right column
+                            <div className="hidden md:flex h-full items-center justify-center border border-dashed border-white/5 rounded-3xl p-12 text-center opacity-50">
+                                <p className="text-white/30">Upload an image to get started</p>
+                            </div>
+                        )}
+                    </div>
+                </main>
+
+                <footer className="mt-20 text-center flex items-center justify-center gap-2 text-white/30 text-sm font-medium">
+                    Crafted with <Heart className="w-4 h-4 text-primary fill-primary/20" /> by Ayush
+                </footer>
+            </div>
         </div>
     );
 };
