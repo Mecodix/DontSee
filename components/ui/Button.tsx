@@ -13,14 +13,16 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
         const baseStyles = "py-4 rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2 relative overflow-hidden select-none";
 
+        const isInteractive = !isLoading && !disabled;
+
         const variants = {
-            primary: "bg-primary hover:bg-white text-on-primary shadow-primary/10",
-            secondary: "bg-secondary-container hover:bg-secondary-hover text-white shadow-secondary-container/20",
-            ghost: "bg-transparent hover:bg-white/5 text-outline hover:text-white shadow-none",
-            destructive: "bg-error-container hover:bg-red-900 text-white shadow-error-container/10"
+            primary: cn("bg-primary text-on-primary shadow-primary/10", isInteractive && "hover:bg-white"),
+            secondary: cn("bg-secondary-container text-white shadow-secondary-container/20", isInteractive && "hover:bg-secondary-hover"),
+            ghost: cn("bg-transparent text-outline shadow-none", isInteractive && "hover:bg-white/5 hover:text-white"),
+            destructive: cn("bg-error-container text-white shadow-error-container/10", isInteractive && "hover:bg-red-900")
         };
 
-        const disabledStyles = "opacity-50 cursor-not-allowed active:scale-100 hover:bg-inherit";
+        const disabledStyles = "opacity-50 cursor-not-allowed active:scale-100";
 
         return (
             <button
@@ -44,7 +46,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
                     </div>
                 ) : (
                     <>
-                        {icon && <span className="w-5 h-5">{icon}</span>}
+                        {icon && <span className="w-5 h-5 flex items-center justify-center">{icon}</span>}
                         {children}
                     </>
                 )}

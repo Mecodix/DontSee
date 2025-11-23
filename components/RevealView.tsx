@@ -66,7 +66,7 @@ export const RevealView: React.FC<RevealViewProps> = ({
                     disabled={isProcessing || !hasSignature}
                     isLoading={isProcessing}
                     loadingText={getButtonLabel()}
-                    icon={!isProcessing && <IconZap />}
+                    icon={!isProcessing && <IconZap className="w-5 h-5" />}
                     className="w-full"
                 >
                     {!isProcessing && "Reveal"}

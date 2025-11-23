@@ -80,8 +80,10 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                     onChange={(e) => setMessage(e.target.value)}
                     placeholder="Enter secret message here..."
                     className={cn(
-                        "flex-1 min-h-[120px]",
-                        isOverLimit ? 'border-error focus:border-error focus:ring-error' : ''
+                        "flex-1 min-h-[120px] bg-surface border text-white rounded-2xl focus:outline-none focus:ring-1 transition-colors placeholder-outline",
+                        isOverLimit
+                            ? 'border-error focus:border-error focus:ring-error'
+                            : 'border-secondary-container focus:border-primary focus:ring-primary'
                     )}
                     footer={footerContent}
                 />
@@ -129,7 +131,7 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                         disabled={isProcessing || !message || isOverLimit}
                         isLoading={isProcessing}
                         loadingText={getButtonLabel()}
-                        icon={!isProcessing && <IconEyeOff />}
+                        icon={!isProcessing && <IconEyeOff className="w-5 h-5" />}
                         className="w-full"
                     >
                         {!isProcessing && "Conceal"}
