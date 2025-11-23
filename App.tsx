@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AppMode, AppImage } from './types';
-import { IconBlinkingEye, IconHeart } from './components/Icons';
+import { IconBlinkingEye, IconHeart, IconFilePlus } from './components/Icons';
 import { Toast } from './components/Toast';
 import { ImagePreview } from './components/ImagePreview';
 import { ConcealView } from './components/ConcealView';
@@ -9,6 +9,7 @@ import { calculateMaxBytes, getByteLength } from './utils/capacity';
 import { useImageHandler } from './hooks/useImageHandler';
 import { useSteganography } from './hooks/useSteganography';
 import { usePasteHandler } from './hooks/usePasteHandler';
+import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 
 // Helper to format bytes
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -158,6 +159,9 @@ const App: React.FC = () => {
         );
     };
 
+    // Hook up Global Drag & Drop
+    const { isDragging } = useGlobalDragDrop(handleFileDrop);
+
     // Hook up Paste Handler
     usePasteHandler(
         (file) => {
@@ -208,8 +212,19 @@ const App: React.FC = () => {
     );
 
     return (
-        <div className="min-h-screen w-full flex flex-col items-center py-8 px-4">
+        <div className="min-h-screen w-full flex flex-col items-center py-8 px-4 relative">
             <Toast notification={notification} />
+
+            {/* Global Drop Overlay */}
+            {isDragging && (
+                <div className="fixed inset-0 z-[999] bg-surface/90 backdrop-blur-md flex flex-col items-center justify-center border-4 border-primary border-dashed m-4 rounded-[32px] animate-pulse">
+                    <div className="bg-primary/20 p-8 rounded-full mb-6">
+                        <IconFilePlus className="w-16 h-16 text-primary" />
+                    </div>
+                    <h2 className="text-4xl font-bold text-white font-brand">Drop Image Here</h2>
+                    <p className="text-outline mt-4 text-lg">Release to upload instantly</p>
+                </div>
+            )}
 
             <header className="w-full max-w-5xl flex justify-between items-center mb-10">
                 <div className="flex items-center gap-3">
