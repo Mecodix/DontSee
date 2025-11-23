@@ -8,6 +8,8 @@ export type ProcessingStage = 'idle' | 'analyzing' | 'processing' | 'rendering';
 export const useSteganography = () => {
     // Track the current scan operation to prevent race conditions
     const currentScanId = useRef(0);
+    // Track current active operation (Encode/Decode) to prevent race conditions
+    const currentOperationId = useRef(0);
 
     const [password, setPassword] = useState('');
     const [message, setMessage] = useState('');
@@ -54,8 +56,9 @@ export const useSteganography = () => {
     }, [message, password]);
 
     const resetStegoState = () => {
-        // Invalidate any pending scans
+        // Invalidate any pending scans and operations
         currentScanId.current++;
+        currentOperationId.current++;
 
         setResultBlobUrl(null);
         setDecodedMessage('');
@@ -129,6 +132,7 @@ export const useSteganography = () => {
         const currentBytes = getByteLength(message);
         if (currentBytes > maxBytes) return notify('error', `Message is too long! Limit is ${maxBytes} bytes`);
 
+        const opId = ++currentOperationId.current;
         setIsProcessing(true);
         setProgress(0);
         setStage('analyzing');
@@ -137,16 +141,24 @@ export const useSteganography = () => {
         await new Promise(r => setTimeout(r, 0));
 
         try {
+            if (opId !== currentOperationId.current) return;
             const bitmap = await createImageBitmap(image.imgObject);
+
+            if (opId !== currentOperationId.current) return;
             setStage('processing');
 
             const resultBlob = await steganographyService.encode(
                 bitmap,
                 message,
                 password,
-                (p) => setProgress(old => Math.max(old, p))
+                (p) => {
+                    if (opId === currentOperationId.current) {
+                        setProgress(old => Math.max(old, p));
+                    }
+                }
             );
 
+            if (opId !== currentOperationId.current) return;
             setStage('rendering');
 
             const url = URL.createObjectURL(resultBlob);
@@ -158,6 +170,7 @@ export const useSteganography = () => {
             setStage('idle');
 
         } catch (err) {
+            if (opId !== currentOperationId.current) return;
             const errorMessage = err instanceof Error ? err.message : 'Encoding failed';
             notify('error', errorMessage);
             setIsProcessing(false);
@@ -167,6 +180,7 @@ export const useSteganography = () => {
     };
 
     const processDecode = async (image: AppImage) => {
+        const opId = ++currentOperationId.current;
         setIsProcessing(true);
         setProgress(0);
         setStage('analyzing');
@@ -175,25 +189,35 @@ export const useSteganography = () => {
         await new Promise(r => setTimeout(r, 0));
 
         try {
+            if (opId !== currentOperationId.current) return;
             const bitmap = await createImageBitmap(image.imgObject);
 
+            if (opId !== currentOperationId.current) return;
             setStage('processing');
 
             const text = await steganographyService.decode(
                 bitmap,
                 password,
-                (p) => setProgress(old => Math.max(old, p))
+                (p) => {
+                    if (opId === currentOperationId.current) {
+                        setProgress(old => Math.max(old, p));
+                    }
+                }
             );
 
+            if (opId !== currentOperationId.current) return;
             setDecodedMessage(text);
         } catch (err) {
+            if (opId !== currentOperationId.current) return;
             setDecodedMessage('');
             const errorMessage = err instanceof Error ? err.message : 'Decoding failed';
             notify('error', errorMessage === 'Decryption failed' ? 'Wrong Password' : errorMessage);
         } finally {
-            setIsProcessing(false);
-            setProgress(0);
-            setStage('idle');
+            if (opId === currentOperationId.current) {
+                setIsProcessing(false);
+                setProgress(0);
+                setStage('idle');
+            }
         }
     };
 

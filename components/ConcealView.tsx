@@ -40,6 +40,16 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
     const usagePercent = maxBytes > 0 ? Math.min((currentBytes / maxBytes) * 100, 100) : 0;
     const isOverLimit = currentBytes > maxBytes;
 
+    const getDownloadName = () => {
+        if (!image) return 'dontsee_secure.png';
+        const name = image.name;
+        const lastDotIndex = name.lastIndexOf('.');
+        if (lastDotIndex === -1) return `${name}_secure.png`;
+        return `${name.substring(0, lastDotIndex)}_secure.png`;
+    };
+
+    const downloadName = getDownloadName();
+
     return (
         <>
             <div className="flex flex-col gap-2">
@@ -80,14 +90,14 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
             {resultBlobUrl ? (
                 <div className="animate-slide-up bg-surface-raised border border-secondary-container p-4 rounded-2xl flex items-center justify-between">
                     <div className="flex flex-col justify-center max-w-[70%]">
-                        <p className="text-white font-bold text-sm mb-0.5 truncate" title={image ? `${image.name.split('.').slice(0, -1).join('.')}_secure.png` : 'dontsee_secure.png'}>
-                            {image ? `${image.name.split('.').slice(0, -1).join('.')}_secure.png` : 'dontsee_secure.png'}
+                        <p className="text-white font-bold text-sm mb-0.5 truncate" title={downloadName}>
+                            {downloadName}
                         </p>
                         <p className="text-outline text-xs font-mono">{formatBytes(resultSize)}</p>
                     </div>
                     <a
                         href={resultBlobUrl}
-                        download={image ? `${image.name.split('.').slice(0, -1).join('.')}_secure.png` : 'dontsee_secure.png'}
+                        download={downloadName}
                         className="w-12 h-12 bg-primary hover:bg-white text-on-primary rounded-full flex items-center justify-center transition-transform active:scale-95 shadow-lg flex-shrink-0"
                         aria-label="Download encoded image"
                     >
