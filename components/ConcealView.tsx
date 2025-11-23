@@ -1,6 +1,7 @@
 import React from 'react';
 import { IconLock, IconDownload, IconEyeOff } from './Icons';
 import { AppImage, ProcessingStage } from '../types';
+import { ExpandableTextarea } from './ExpandableTextarea';
 
 interface ConcealViewProps {
     image: AppImage | null;
@@ -50,33 +51,37 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
 
     const downloadName = getDownloadName();
 
+    const renderFooter = () => (
+        <>
+            <div className="flex items-center gap-3 px-1">
+                <div className="flex-1 h-1.5 bg-surface rounded-full overflow-hidden">
+                    <div
+                        className={`h-full transition-all duration-300 ${isOverLimit ? 'bg-error' : 'bg-primary'}`}
+                        style={{ width: `${usagePercent}%` }}
+                    ></div>
+                </div>
+                <span className={`text-xs font-mono ${isOverLimit ? 'text-error font-bold' : 'text-outline'}`}>
+                    {currentBytes} / {maxBytes} bytes
+                </span>
+            </div>
+            {maxBytes === 0 && (
+                <p className="text-xs text-error font-bold px-1 animate-slide-up mt-1">
+                    Image too small to hide data. Please upload a larger image.
+                </p>
+            )}
+        </>
+    );
+
     return (
         <>
             <div className="flex flex-col gap-2">
-                <textarea
+                <ExpandableTextarea
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     placeholder="Enter secret message here..."
-                    className={`flex-1 bg-surface border text-white rounded-2xl p-4 resize-none focus:outline-none focus:ring-1 transition-colors placeholder-outline min-h-[120px]
-                    ${isOverLimit ? 'border-error focus:border-error focus:ring-error' : 'border-secondary-container focus:border-primary focus:ring-primary'}`}
-                ></textarea>
-
-                <div className="flex items-center gap-3 px-1">
-                    <div className="flex-1 h-1.5 bg-surface rounded-full overflow-hidden">
-                        <div
-                            className={`h-full transition-all duration-300 ${isOverLimit ? 'bg-error' : 'bg-primary'}`}
-                            style={{ width: `${usagePercent}%` }}
-                        ></div>
-                    </div>
-                    <span className={`text-xs font-mono ${isOverLimit ? 'text-error font-bold' : 'text-outline'}`}>
-                        {currentBytes} / {maxBytes} bytes
-                    </span>
-                </div>
-                {maxBytes === 0 && (
-                    <p className="text-xs text-error font-bold px-1 animate-slide-up">
-                        Image too small to hide data. Please upload a larger image.
-                    </p>
-                )}
+                    renderFooter={renderFooter}
+                    className={isOverLimit ? 'border-error focus-within:border-error focus-within:ring-error' : ''}
+                />
             </div>
 
             <div className="relative">

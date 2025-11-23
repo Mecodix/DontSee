@@ -1,6 +1,7 @@
 import React from 'react';
 import { IconLock, IconZap } from './Icons';
 import { AppImage, ProcessingStage } from '../types';
+import { ExpandableTextarea } from './ExpandableTextarea';
 
 interface RevealViewProps {
     image: AppImage | null;
@@ -49,8 +50,12 @@ export const RevealView: React.FC<RevealViewProps> = ({
             )}
 
             {decodedMessage && (
-                <div className="flex-1 bg-surface-container border border-primary/50 rounded-2xl p-6 flex items-center justify-center transition-colors min-h-[120px] animate-slide-up">
-                    <p className="w-full text-left text-primary font-mono text-sm break-words whitespace-pre-wrap">{decodedMessage}</p>
+                <div className="flex-1 w-full animate-slide-up mb-4">
+                    <ExpandableTextarea
+                        value={decodedMessage}
+                        readOnly={true}
+                        className="border-primary/50 bg-surface-container"
+                    />
                 </div>
             )}
 
