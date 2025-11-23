@@ -22,7 +22,7 @@ export const AppShell: React.FC<AppShellProps> = ({
             {dragOverlay}
 
             {/* Global Header */}
-            <header className="w-full max-w-xl flex justify-center items-center mb-10 z-10">
+            <header className="w-full max-w-xl flex justify-start items-center mb-10 z-10">
                 <div className="flex items-center gap-3 glass-panel px-6 py-3 rounded-full">
                     <div className="text-primary animate-pulse-slow">
                         <IconBlinkingEye className="w-6 h-6" />

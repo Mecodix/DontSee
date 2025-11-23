@@ -1,5 +1,6 @@
 import React, { useState, DragEvent, KeyboardEvent, useRef } from 'react';
-import { IconUpload, IconX, IconLock, IconUnlock } from './Icons';
+import { IconX, IconLock, IconUnlock } from './Icons';
+import { ImageToDataIcon } from './ImageToDataIcon';
 import { AppImage } from '../types';
 import { cn } from '../utils/cn';
 
@@ -64,7 +65,9 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
                 image
                     ? 'bg-transparent'
                     : cn(
-                        "min-h-[300px] border-2 border-dashed border-white/10 hover:border-primary/50 hover:bg-white/[0.02]",
+                        "min-h-[300px] border-2 border-dashed border-white/10 hover:border-primary/50",
+                        // Glassmorphism effect as requested:
+                        "bg-white/[0.02] backdrop-blur-[10px]",
                         isDragging && "border-primary bg-primary/5 scale-[1.02] shadow-[0_0_40px_rgba(168,85,247,0.2)]"
                     )
             )}>
@@ -122,10 +125,10 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
                     aria-label="Upload an image"
                 >
                     <div className={cn(
-                        "p-6 rounded-full mb-6 text-primary bg-primary/10 transition-transform duration-300 shadow-[0_0_30px_rgba(168,85,247,0.15)]",
-                        isDragging ? 'scale-110 bg-primary/20' : 'group-hover:scale-110 group-hover:rotate-3'
+                        "mb-6 transition-transform duration-300",
+                        isDragging ? 'scale-110' : 'group-hover:rotate-0'
                     )}>
-                        <IconUpload className="w-10 h-10" />
+                        <ImageToDataIcon />
                     </div>
                     <span className="text-white font-bold text-xl tracking-tight">
                         {isDragging ? 'Drop it like it\'s hot!' : 'Upload Image'}
