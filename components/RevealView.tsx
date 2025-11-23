@@ -44,33 +44,27 @@ export const RevealView: React.FC<RevealViewProps> = ({
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Enter Password to Unlock"
                         startIcon={<IconLock className="w-5 h-5" />}
-                        // autoFocus removed
                     />
                 </div>
             )}
 
             {decodedMessage && (
-                <div className="relative group animate-slide-up">
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-blue-500 rounded-2xl opacity-20 group-hover:opacity-40 transition duration-500 blur"></div>
-
-                    {/* Fixed Height Container */}
-                    <div className="relative bg-black/40 border border-white/10 rounded-2xl overflow-hidden shadow-xl h-48">
-                         {/* We pass 'h-full' to the textarea so it fills the 48 unit height container.
-                             ExpandableTextarea handles the scroll internally via the textarea element. */}
-                        <ExpandableTextarea
-                            value={decodedMessage}
-                            readOnly
-                            className="bg-transparent border-none text-primary font-mono text-sm p-5 focus:outline-none focus:ring-0 resize-none w-full h-full"
-                            placeholder="Decoded text will appear here..."
-                            // Ensure the internal textarea takes full height
-                            style={{ height: '100%' }}
-                        />
+                <div className="animate-slide-up">
+                    {/* Fixed Height Container, no glow */}
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-5 h-48 flex flex-col shadow-inner">
+                         {/*
+                             Using a raw pre tag for reliable scrolling of content.
+                             ExpandableTextarea was causing issues with nesting/scrolling.
+                             User wants fixed size and scrollable.
+                         */}
+                         <div className="flex-1 w-full h-full overflow-y-auto pr-2 custom-scrollbar text-primary font-mono text-sm leading-relaxed break-words whitespace-pre-wrap">
+                            {decodedMessage}
+                         </div>
                     </div>
                 </div>
             )}
 
             <div className="relative overflow-hidden rounded-2xl">
-                {/* Updated Button Color to match standard primary UI (consistent with Conceal) */}
                 <Button
                     variant="primary"
                     onClick={() => image && onDecode(image)}

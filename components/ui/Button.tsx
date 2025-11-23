@@ -16,9 +16,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         const isInteractive = !isLoading && !disabled;
 
         const variants = {
+            // Updated: Deep solid color, removed external glow/shadow, consistent hover
             primary: cn(
-                "bg-primary text-white shadow-lg shadow-primary/25",
-                isInteractive && "hover:bg-violet-400 hover:shadow-primary/40 hover:-translate-y-0.5"
+                "bg-primary text-white border border-transparent",
+                isInteractive && "hover:bg-violet-400"
             ),
             secondary: cn(
                 "bg-white/5 text-white border border-white/10 backdrop-blur-sm",

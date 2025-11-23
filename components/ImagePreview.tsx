@@ -86,7 +86,8 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
                          <button onClick={onReset}
                             disabled={isLoading}
                             aria-label="Remove image"
-                            className="w-10 h-10 flex items-center justify-center bg-black/50 hover:bg-red-500/80 rounded-full text-white backdrop-blur-md border border-white/10 transition-all hover:scale-110 shadow-lg">
+                            // Changed hover:bg-red-500/80 to hover:bg-primary (pinkish purple)
+                            className="w-10 h-10 flex items-center justify-center bg-black/50 hover:bg-primary rounded-full text-white backdrop-blur-md border border-white/10 transition-all hover:scale-110 shadow-lg">
                             <IconX className="w-5 h-5" />
                         </button>
                     </div>
@@ -99,8 +100,10 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
                             className={cn(
                                 "absolute bottom-4 left-4 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 animate-slide-up shadow-xl z-10 border backdrop-blur-md",
                                 requiresPassword
-                                    ? 'bg-primary/90 text-white border-white/20 shadow-primary/20'
-                                    : 'bg-emerald-500/90 text-white border-white/20 shadow-emerald-500/20'
+                                    // Updated colors to match UI: Pink/Purple for locked
+                                    ? 'bg-pink-600/90 text-white border-white/20 shadow-pink-600/20'
+                                    // Updated colors to match UI: Deep Violet for open (instead of emerald)
+                                    : 'bg-violet-600/90 text-white border-white/20 shadow-violet-600/20'
                             )}
                         >
                             {requiresPassword ? (

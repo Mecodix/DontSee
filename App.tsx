@@ -35,37 +35,37 @@ const getHeaderContent = (
     if (isReading) {
         return {
             title: "Reading Image",
-            desc: "Decoding pixels..."
+            desc: "Decoding pixel data..."
         };
     }
     if (isScanning) {
         return {
-            title: "Analyzing",
-            desc: "Checking for hidden text..."
+            title: "Analyzing Image",
+            desc: "Scanning for hidden content..."
         };
     }
     if (!image) {
         return {
             title: "Steganography",
-            desc: "Hide text in images, or reveal secrets."
+            desc: "Securely hide text within images, or reveal hidden secrets."
         };
     }
     if (mode === AppMode.HIDE) {
         return {
-            title: "Conceal",
-            desc: "Hide your secret text."
+            title: "Secure Your Text",
+            desc: "Embed secret text into this image."
         };
     }
     // Reveal Mode
     if (requiresPassword) {
         return {
-            title: "Locked",
-            desc: "Password required to decrypt."
+            title: "Locked Content",
+            desc: "Enter password to decrypt the hidden text."
         };
     }
     return {
-        title: "Found Secret",
-        desc: "Hidden text detected."
+        title: "Secret Found",
+        desc: "Hidden text detected successfully."
     };
 };
 

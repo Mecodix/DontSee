@@ -61,12 +61,13 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                 <div
                     className={cn(
                         "h-full transition-all duration-300 shadow-[0_0_10px_currentColor]",
-                        isOverLimit ? 'bg-red-500 text-red-500' : 'bg-primary text-primary'
+                        // Updated error color to use pink/purple variant for consistency
+                        isOverLimit ? 'bg-pink-500 text-pink-500' : 'bg-primary text-primary'
                     )}
                     style={{ width: `${usagePercent}%` }}
                 ></div>
             </div>
-            <Typography variant="caption" className={isOverLimit ? 'text-red-400 font-bold' : 'text-gray-500'}>
+            <Typography variant="caption" className={isOverLimit ? 'text-pink-400 font-bold' : 'text-gray-500'}>
                 {currentBytes} / {maxBytes} bytes
             </Typography>
         </div>
@@ -82,7 +83,7 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                     className={cn(
                         "flex-1 min-h-[140px] bg-white/5 border text-white rounded-2xl p-4 focus:outline-none focus:ring-1 transition-all duration-300 placeholder:text-gray-600 resize-none",
                         isOverLimit
-                            ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/50'
+                            ? 'border-pink-500/50 focus:border-pink-500 focus:ring-pink-500/50'
                             : 'border-white/10 focus:border-primary/50 focus:bg-white/[0.07]'
                     )}
                     footer={footerContent}
@@ -93,9 +94,9 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                 </div>
 
                 {maxBytes === 0 && (
-                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-center gap-3 animate-slide-up">
-                         <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-                         <Typography variant="caption" className="text-red-400 font-bold">
+                    <div className="bg-pink-500/10 border border-pink-500/20 rounded-xl p-3 flex items-center gap-3 animate-slide-up">
+                         <div className="w-2 h-2 rounded-full bg-pink-500 animate-pulse"></div>
+                         <Typography variant="caption" className="text-pink-400 font-bold">
                             Image too small to hide data. Please upload a larger image.
                         </Typography>
                     </div>
@@ -126,7 +127,7 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                     <a
                         href={resultBlobUrl}
                         download={downloadName}
-                        className="w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-lg shadow-primary/20 hover:shadow-primary/40 group"
+                        className="w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-lg group border border-white/10"
                         aria-label="Download encoded image"
                     >
                         <IconDownload className="w-6 h-6 group-hover:animate-bounce" />
