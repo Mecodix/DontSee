@@ -50,42 +50,64 @@ export const ExpandableTextarea: React.FC<ExpandableTextareaProps> = ({
     };
 
     // Common classes for the textarea
-    const baseClasses = `w-full h-full bg-transparent border-none resize-none focus:outline-none focus:ring-0 text-white placeholder-outline p-4 font-mono text-sm leading-relaxed custom-scrollbar transition-all duration-300`;
+    const baseClasses = `w-full h-full bg-transparent border-none resize-none focus:outline-none focus:ring-0 text-white placeholder-outline font-mono text-sm leading-relaxed custom-scrollbar transition-all duration-300`;
+
+    // Keyframes for animation (injected via style)
+    const styles = `
+        @keyframes zoomInModal {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .animate-zoom-in-modal {
+            animation: zoomInModal 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+    `;
 
     // Expanded Content (Portal)
+    // Changed: Centered Modal with Backdrop instead of Full Screen
     const expandedContent = (
-        <div className="fixed inset-0 z-[9999] bg-surface/95 backdrop-blur-xl flex flex-col p-6 animate-fade-in w-screen h-screen">
-            <div className="max-w-5xl w-full mx-auto flex flex-col h-full">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4 py-6">
+            <style>{styles}</style>
+            {/* Backdrop */}
+            <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity duration-300"
+                onClick={toggleExpand}
+                aria-hidden="true"
+            />
+
+            {/* Modal Container */}
+            <div className="relative w-full max-w-5xl h-[85vh] bg-[#1e1c24] rounded-3xl shadow-2xl border border-white/10 flex flex-col overflow-hidden animate-zoom-in-modal origin-center">
                 {/* Header / Controls */}
-                <div className="flex justify-between items-center px-2 pt-2 pb-4 border-b border-white/10 mb-4">
-                    <h3 className="text-2xl font-bold text-white font-brand ml-2">
+                <div className="flex justify-between items-center px-6 py-4 border-b border-white/5 bg-[#25232b]">
+                    <h3 className="text-xl font-bold text-white font-brand flex items-center gap-2">
                         {readOnly ? "Revealed Message" : "Editing Secret"}
+                        <span className="text-xs font-mono text-outline px-2 py-0.5 rounded-full bg-white/5">Zen Mode</span>
                     </h3>
                     <button
                         onClick={toggleExpand}
-                        className="p-3 text-outline hover:text-primary transition-colors rounded-full hover:bg-white/10"
+                        className="p-2 text-outline hover:text-primary transition-colors rounded-full hover:bg-white/10 active:scale-95"
                         aria-label="Minimize"
                         title="Minimize (Esc)"
                     >
-                        <IconMinimize className="w-8 h-8" />
+                        <IconMinimize className="w-6 h-6" />
                     </button>
                 </div>
 
-                {/* Text Area */}
-                <div className="flex-1 relative min-h-0 bg-surface-container/50 rounded-2xl border border-white/10 overflow-hidden">
+                {/* Text Area Container */}
+                <div className="flex-1 relative bg-surface-container/20">
                     <textarea
                         value={value}
                         onChange={onChange}
                         readOnly={readOnly}
                         placeholder={placeholder}
-                        className={`${baseClasses} text-lg md:text-xl p-8`}
+                        className={`${baseClasses} text-lg p-8`}
                         autoFocus
                     />
                 </div>
 
                 {/* Footer */}
                 {renderFooter && (
-                    <div className="mt-4 px-2 pb-2 w-full">
+                    <div className="px-6 py-3 bg-[#25232b] border-t border-white/5">
                         {renderFooter()}
                     </div>
                 )}
@@ -101,7 +123,7 @@ export const ExpandableTextarea: React.FC<ExpandableTextareaProps> = ({
                 : 'border-secondary-container focus-within:border-primary focus-within:ring-1 focus-within:ring-primary'
             }`}>
 
-            {/* Header / Controls */}
+            {/* Header / Controls - ABSOLUTE POS */}
             <div className="absolute top-2 right-2 z-10">
                 <button
                     onClick={toggleExpand}
@@ -113,7 +135,7 @@ export const ExpandableTextarea: React.FC<ExpandableTextareaProps> = ({
                 </button>
             </div>
 
-            {/* Text Area */}
+            {/* Text Area - ADDED PADDING RIGHT to avoid icon overlap */}
             <div className="flex-1 relative min-h-0">
                 <textarea
                     ref={textareaRef}
@@ -121,7 +143,7 @@ export const ExpandableTextarea: React.FC<ExpandableTextareaProps> = ({
                     onChange={onChange}
                     readOnly={readOnly}
                     placeholder={placeholder}
-                    className={baseClasses}
+                    className={`${baseClasses} p-4 pr-12`}
                 />
             </div>
 
