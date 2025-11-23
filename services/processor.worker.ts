@@ -1,16 +1,19 @@
 import { argon2id } from 'hash-wasm';
+import {
+    SIG_BITS,
+    SALT_BITS,
+    IV_BITS,
+    LENGTH_BITS,
+    SEQUENTIAL_BITS
+} from '../utils/constants';
 
 // Constants
 const SIG_UNLOCKED = "0100010001010011"; // "DS"
 const SIG_UNLOCKED_RAW = "0100010001010101"; // "DU"
 
 // Secure Scattering Signatures (V2)
-const SIG_LOCKED_SECURE = "0100010001010000"; // "DP" (DontSee Password-secure)
-const SIG_LOCKED_RAW_SECURE = "0100010001010001"; // "DQ" (DontSee Raw-secure)
-
-// REMOVED: Legacy Locked Signatures (No Backward Compatibility)
-// const SIG_LOCKED = "0100010001001100";   // "DL"
-// const SIG_LOCKED_RAW = "0100010001001011";   // "DK"
+const SIG_LOCKED_SECURE = "0100010001010000"; // "DP"
+const SIG_LOCKED_RAW_SECURE = "0100010001010001"; // "DQ"
 
 // Internal Constant for "Empty Password"
 const EMPTY_PASSWORD_SENTINEL = "___DONTSEE_EMPTY_PASSWORD_SENTINEL_V1___";
@@ -98,16 +101,15 @@ async function decompress(data: Uint8Array): Promise<string> {
 
 // Crypto Helper (Argon2id)
 async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
-    // hash-wasm requires non-empty password.
     const effectivePassword = (!password || password.length === 0) ? EMPTY_PASSWORD_SENTINEL : password;
 
     const rawKey = await argon2id({
         password: effectivePassword,
         salt: salt,
         parallelism: 1,
-        iterations: 16, // Security/Performance tradeoff for web
-        memorySize: 16384, // 16MB
-        hashLength: 32, // 256-bit key
+        iterations: 16,
+        memorySize: 16384,
+        hashLength: 32,
         outputType: 'binary'
     });
 
@@ -131,27 +133,24 @@ async function handleEncode(
     password?: string
 ) {
     const hasPassword = password && password.length > 0;
-
-    // Feature Check: Compression
     const canCompress = supportsCompression();
 
     // Determine Signature
     let signature;
     if (hasPassword) {
-        // ALWAYS use secure signature
         signature = canCompress ? SIG_LOCKED_SECURE : SIG_LOCKED_RAW_SECURE;
     } else {
         signature = canCompress ? SIG_UNLOCKED : SIG_UNLOCKED_RAW;
     }
 
     // Crypto Setup
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const salt = crypto.getRandomValues(new Uint8Array(16)); // 128 bits
+    const iv = crypto.getRandomValues(new Uint8Array(12)); // 96 bits
 
-    // Derive Key using Argon2id
+    // Derive Key
     const key = await deriveKey(password || "", salt);
 
-    // Compress OR Convert Raw
+    // Compress OR Raw
     let dataPayload: Uint8Array;
     if (canCompress) {
         dataPayload = await compress(message);
@@ -162,53 +161,66 @@ async function handleEncode(
     const encryptedBuffer = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, dataPayload);
     const encryptedBytes = new Uint8Array(encryptedBuffer);
 
-    // Header Construction
-    let headerBits = "";
-    headerBits += signature;
-    for(let b of salt) headerBits += b.toString(2).padStart(8, '0');
-    for(let b of iv) headerBits += b.toString(2).padStart(8, '0');
-
     const dataBitsLength = encryptedBytes.length * 8;
-    headerBits += dataBitsLength.toString(2).padStart(32, '0');
+
+    // --- Header Construction ---
+
+    // 1. Sequential Header (Signature + Salt)
+    let seqHeaderBits = "";
+    seqHeaderBits += signature;
+    for(let b of salt) seqHeaderBits += b.toString(2).padStart(8, '0');
+
+    // 2. Scattered Payload (IV + Length + EncryptedData)
+    // Note: IV and Length were previously sequential. Now they are scattered to hide them.
+    let scatteredPayloadBits = "";
+    for(let b of iv) scatteredPayloadBits += b.toString(2).padStart(8, '0');
+    scatteredPayloadBits += dataBitsLength.toString(2).padStart(32, '0'); // Length is 32 bits
+
+    const totalPayloadBits = scatteredPayloadBits.length + dataBitsLength;
 
     // Capacity Check
     const totalPixels = pixels.length / 4;
-    if ((headerBits.length + dataBitsLength) > totalPixels * 3) {
+    const totalAvailableBits = totalPixels * 3;
+
+    // Total required = Sequential (144) + Scattered (128 + body)
+    if ((seqHeaderBits.length + totalPayloadBits) > totalAvailableBits) {
             throw new Error("Message too long for this image size");
     }
 
-    // Embed Header (Sequential)
+    // --- Writing Phase ---
+
+    // 1. Write Sequential Header
     let ptr = 0;
-    for (let i = 0; i < headerBits.length; i++) {
+    for (let i = 0; i < seqHeaderBits.length; i++) {
         while ((ptr + 1) % 4 === 0) ptr++;
-        if (headerBits[i] === '1') pixels[ptr] |= 1;
+        if (seqHeaderBits[i] === '1') pixels[ptr] |= 1;
         else pixels[ptr] &= ~1;
         ptr++;
     }
-    const headerEndIndex = ptr;
+    const headerEndIndex = ptr; // Points to where sequential writing stopped
 
-    // Embed Body (Scattered LCG)
+    // 2. Initialize LCG
     const headerValidCount = countValidBytes(headerEndIndex);
     const totalValidCount = (pixels.length / 4) * 3;
     const bodyValidCount = totalValidCount - headerValidCount;
 
-    // Seed Derivation Logic
+    // Seed Derivation
     let seed: number;
     if (hasPassword) {
-        // Always Secure Logic
         seed = await deriveScatteringSeed(salt, password!);
     } else {
-        // Legacy/Unlocked Logic: Salt only
         const saltView = new DataView(salt.buffer);
         seed = saltView.getUint32(0, true);
     }
 
     const { start, step } = initLCG(seed, bodyValidCount);
 
-    const needed = dataBitsLength;
+    // 3. Write Scattered Payload
+    const needed = totalPayloadBits;
     let lastReportTime = performance.now();
 
     for (let i = 0; i < needed; i++) {
+        // Progress reporting
         if (i % 1000 === 0) {
             const now = performance.now();
             if (now - lastReportTime > 33) {
@@ -219,13 +231,23 @@ async function handleEncode(
             }
         }
 
+        // LCG Index Logic
         const logicalBodyIndex = (start + i * step) % bodyValidCount;
         const absoluteLogicalIndex = headerValidCount + logicalBodyIndex;
         const targetIdx = getPhysicalIndex(absoluteLogicalIndex);
 
-        const byteIndex = Math.floor(i / 8);
-        const bitIndex = 7 - (i % 8);
-        const bit = (encryptedBytes[byteIndex] >>> bitIndex) & 1;
+        // Bit Extraction
+        let bit = 0;
+        if (i < scatteredPayloadBits.length) {
+            // Metadata (IV + Length)
+            bit = parseInt(scatteredPayloadBits[i]);
+        } else {
+            // Encrypted Body
+            const bodyBitIndex = i - scatteredPayloadBits.length;
+            const byteIndex = Math.floor(bodyBitIndex / 8);
+            const bitSubIndex = 7 - (bodyBitIndex % 8);
+            bit = (encryptedBytes[byteIndex] >>> bitSubIndex) & 1;
+        }
 
         if (bit === 1) pixels[targetIdx] |= 1;
         else pixels[targetIdx] &= ~1;
@@ -235,20 +257,18 @@ async function handleEncode(
     postMessage({ id, success: true, progress: 100 });
 
     if (canvas && ctx) {
-        // OffscreenCanvas Path: Convert directly to Blob
         const newImageData = new ImageData(pixels, canvas.width, canvas.height);
         ctx.putImageData(newImageData, 0, 0);
         const blob = await canvas.convertToBlob({ type: 'image/png' });
         postMessage({ id, success: true, blob });
     } else {
-        // Legacy/Fallback Path: Return pixels
         postMessage({ id, success: true, pixels: pixels.buffer, width, height }, { transfer: [pixels.buffer] });
     }
 }
 
 async function handleDecode(id: string, pixels: PixelArray, password?: string) {
     let ptr = 0;
-    const readBits = (count: number) => {
+    const readSequentialBits = (count: number) => {
         let bits = "";
         for(let i=0; i<count; i++) {
             while ((ptr + 1) % 4 === 0) ptr++;
@@ -258,41 +278,24 @@ async function handleDecode(id: string, pixels: PixelArray, password?: string) {
         return bits;
     };
 
-    // Extract Header
-    const sig = readBits(16);
+    // --- Read Sequential Header ---
+    const sig = readSequentialBits(SIG_BITS); // 16 bits
 
-    // Check Signature Type
-    // REMOVED: Legacy Locked support
     const isSecureLocked = (sig === SIG_LOCKED_SECURE || sig === SIG_LOCKED_RAW_SECURE);
     const isUnlocked = (sig === SIG_UNLOCKED || sig === SIG_UNLOCKED_RAW);
 
     if (!isSecureLocked && !isUnlocked) {
-        // If signature matches old locked signatures, specifically fail
-        // The previous values were "DL" and "DK"
-        // "DL" = 0100010001001100
-        // "DK" = 0100010001001011
         if (sig === "0100010001001100" || sig === "0100010001001011") {
              throw new Error("Legacy format detected. This secure version does not support old images.");
         }
         throw new Error("No DontSee signature found");
     }
 
-    const isCompressed = (sig === SIG_UNLOCKED || sig === SIG_LOCKED_SECURE);
-
-    const saltBits = readBits(128);
+    const saltBits = readSequentialBits(SALT_BITS); // 128 bits
     const salt = new Uint8Array(16);
     for(let i=0; i<16; i++) salt[i] = parseInt(saltBits.slice(i*8, (i+1)*8), 2);
 
-    const ivBits = readBits(96);
-    const iv = new Uint8Array(12);
-    for(let i=0; i<12; i++) iv[i] = parseInt(ivBits.slice(i*8, (i+1)*8), 2);
-
-    const lenBits = readBits(32);
-    const dataBitLength = parseInt(lenBits, 2);
-
-    if (dataBitLength <= 0 || dataBitLength > pixels.length * 3) throw new Error("Corrupt header data");
-
-    // Reconstruct Scatter Logic
+    // --- Initialize LCG ---
     const headerEndIndex = ptr;
     const headerValidCount = countValidBytes(headerEndIndex);
     const totalValidCount = (pixels.length / 4) * 3;
@@ -300,16 +303,47 @@ async function handleDecode(id: string, pixels: PixelArray, password?: string) {
 
     let seed: number;
     if (isSecureLocked) {
-        // Always use Secure Logic for locked images
         seed = await deriveScatteringSeed(salt, password || "");
     } else {
-        // Unlocked Logic
         const saltView = new DataView(salt.buffer);
         seed = saltView.getUint32(0, true);
     }
 
     const { start, step } = initLCG(seed, bodyValidCount);
 
+    // --- Read Scattered Payload ---
+    // We need to read bits one by one from the LCG stream.
+
+    let currentScatteredBitIndex = 0;
+
+    const readScatteredBits = (count: number) => {
+        let bits = "";
+        for(let i=0; i<count; i++) {
+            const logicalBodyIndex = (start + (currentScatteredBitIndex + i) * step) % bodyValidCount;
+            const absoluteLogicalIndex = headerValidCount + logicalBodyIndex;
+            const targetIdx = getPhysicalIndex(absoluteLogicalIndex);
+            bits += (pixels[targetIdx] & 1).toString();
+        }
+        currentScatteredBitIndex += count;
+        return bits;
+    };
+
+    // 1. Read IV (96 bits)
+    const ivBits = readScatteredBits(IV_BITS);
+    const iv = new Uint8Array(12);
+    for(let i=0; i<12; i++) iv[i] = parseInt(ivBits.slice(i*8, (i+1)*8), 2);
+
+    // 2. Read Length (32 bits)
+    const lenBits = readScatteredBits(LENGTH_BITS);
+    const dataBitLength = parseInt(lenBits, 2);
+
+    // FIX 1: Length Bomb Validation
+    const maxPossibleBits = bodyValidCount - (IV_BITS + LENGTH_BITS);
+    if (dataBitLength <= 0 || dataBitLength > maxPossibleBits) {
+        throw new Error("Corrupt header or invalid length (DoS protection)");
+    }
+
+    // 3. Read Body
     const bodyBits = new Uint8Array(dataBitLength);
     let lastReportTime = performance.now();
 
@@ -324,7 +358,8 @@ async function handleDecode(id: string, pixels: PixelArray, password?: string) {
             }
         }
 
-        const logicalBodyIndex = (start + i * step) % bodyValidCount;
+        // Manually inline bit read logic for performance/consistency with encode loop
+        const logicalBodyIndex = (start + (currentScatteredBitIndex + i) * step) % bodyValidCount;
         const absoluteLogicalIndex = headerValidCount + logicalBodyIndex;
         const targetIdx = getPhysicalIndex(absoluteLogicalIndex);
 
@@ -349,15 +384,20 @@ async function handleDecode(id: string, pixels: PixelArray, password?: string) {
         const decryptedBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, encryptedBytes);
         const decryptedBytes = new Uint8Array(decryptedBuf);
 
+        // FIX 2: Garbage Output Check (Magic Bytes)
         let text: string;
-        if (isCompressed) {
-            // If signature says compressed, we MUST decompress
-            if (!supportsCompression()) {
+
+        // Check GZIP Magic Bytes (0x1F 0x8B)
+        const isGzip = decryptedBytes.length >= 2 && decryptedBytes[0] === 0x1F && decryptedBytes[1] === 0x8B;
+
+        if (isGzip) {
+            if (supportsCompression()) {
+                text = await decompress(decryptedBytes);
+            } else {
                 throw new Error("Message is compressed but browser doesn't support decompression.");
             }
-            text = await decompress(decryptedBytes);
         } else {
-            // Signature says Raw
+            // Not GZIP -> Treat as raw text
             text = new TextDecoder().decode(decryptedBytes);
         }
 
@@ -369,17 +409,16 @@ async function handleDecode(id: string, pixels: PixelArray, password?: string) {
 }
 
 function handleScan(id: string, pixels: PixelArray) {
-    // Scan is fast, just check first pixels
     let ptr = 0;
     let sig = "";
-    for(let i=0; i<16; i++) {
+    // Read 16 bits sequentially
+    for(let i=0; i<SIG_BITS; i++) {
         while ((ptr + 1) % 4 === 0) ptr++;
         sig += (pixels[ptr] & 1).toString();
         ptr++;
     }
 
     let result = null;
-    // Only new signatures are recognized
     if (sig === SIG_LOCKED_SECURE || sig === SIG_LOCKED_RAW_SECURE) {
         result = 'locked';
     } else if (sig === SIG_UNLOCKED || sig === SIG_UNLOCKED_RAW) {
@@ -393,7 +432,6 @@ self.onmessage = async (e: MessageEvent) => {
     const { id, type, imageData, imageBitmap, password, message } = e.data;
 
     try {
-        // 1. Handle Image Source (OffscreenCanvas vs ArrayBuffer)
         let pixels: Uint8ClampedArray;
         let canvas: OffscreenCanvas | null = null;
         let ctx: OffscreenCanvasRenderingContext2D | null = null;
@@ -401,10 +439,8 @@ self.onmessage = async (e: MessageEvent) => {
         let height = 0;
 
         if (imageBitmap) {
-            // We prefer OffscreenCanvas if available
             width = imageBitmap.width;
             height = imageBitmap.height;
-
             try {
                 canvas = new OffscreenCanvas(width, height);
                 ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -415,19 +451,10 @@ self.onmessage = async (e: MessageEvent) => {
                      throw new Error("Context creation failed");
                 }
             } catch (e) {
-                // Fallback if OffscreenCanvas fails but we have imageBitmap
-                // We can't easily read pixels from ImageBitmap without a canvas (even on main thread).
-                // So if OffscreenCanvas fails in worker, we are kinda stuck unless we assume
-                // the browser supports ImageBitmap but NOT OffscreenCanvas (rare edge case).
-                // But if we caught an error, let's throw, because 'pixels' isn't set.
                  throw new Error("OffscreenCanvas failed and no fallback pixel source.");
             }
         } else if (imageData) {
             pixels = new Uint8ClampedArray(imageData);
-            // If using raw buffer, we might not know width/height unless encoded in buffer or passed.
-            // But 'encode' needs it only for fallback.
-            // 'decode'/'scan' don't strictly need width/height for bit extraction if they just iterate pixels.
-            // But let's assume simple buffer usage is legacy or for scan (small buffer).
             width = 0;
             height = 0;
         } else {
