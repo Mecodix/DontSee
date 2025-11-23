@@ -2,11 +2,15 @@ import { argon2id } from 'hash-wasm';
 
 // Constants
 const SIG_UNLOCKED = "0100010001010011"; // "DS"
-const SIG_LOCKED = "0100010001001100";   // "DL"
+const SIG_UNLOCKED_RAW = "0100010001010101"; // "DU"
 
-// NEW: Raw/Uncompressed Signatures
-const SIG_UNLOCKED_RAW = "0100010001010101"; // "DU" (DontSee Uncompressed)
-const SIG_LOCKED_RAW = "0100010001001011";   // "DK" (DontSee Key-Uncompressed)
+// Secure Scattering Signatures (V2)
+const SIG_LOCKED_SECURE = "0100010001010000"; // "DP" (DontSee Password-secure)
+const SIG_LOCKED_RAW_SECURE = "0100010001010001"; // "DQ" (DontSee Raw-secure)
+
+// REMOVED: Legacy Locked Signatures (No Backward Compatibility)
+// const SIG_LOCKED = "0100010001001100";   // "DL"
+// const SIG_LOCKED_RAW = "0100010001001011";   // "DK"
 
 // Internal Constant for "Empty Password"
 const EMPTY_PASSWORD_SENTINEL = "___DONTSEE_EMPTY_PASSWORD_SENTINEL_V1___";
@@ -54,9 +58,7 @@ function countValidBytes(physicalIndex: number): number {
 }
 
 // Shared LCG / Scatter Logic
-function initLCG(salt: Uint8Array, bodyValidCount: number) {
-    const saltView = new DataView(salt.buffer);
-    let seed = saltView.getUint32(0, true);
+function initLCG(seed: number, bodyValidCount: number) {
     const random = mulberry32(seed);
 
     const start = Math.floor(random() * bodyValidCount);
@@ -67,6 +69,20 @@ function initLCG(salt: Uint8Array, bodyValidCount: number) {
         if (step === 0) step = 1;
     }
     return { start, step };
+}
+
+// Derive Scattering Seed from Salt + Password (SHA-256)
+async function deriveScatteringSeed(salt: Uint8Array, password: string): Promise<number> {
+    const enc = new TextEncoder();
+    const passwordBytes = enc.encode(password);
+
+    const buffer = new Uint8Array(salt.length + passwordBytes.length);
+    buffer.set(salt, 0);
+    buffer.set(passwordBytes, salt.length);
+
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const hashView = new DataView(hashBuffer);
+    return hashView.getUint32(0, true);
 }
 
 // Compression Helpers
@@ -119,10 +135,11 @@ async function handleEncode(
     // Feature Check: Compression
     const canCompress = supportsCompression();
 
-    // Determine Signature based on Password + Compression Support
+    // Determine Signature
     let signature;
     if (hasPassword) {
-        signature = canCompress ? SIG_LOCKED : SIG_LOCKED_RAW;
+        // ALWAYS use secure signature
+        signature = canCompress ? SIG_LOCKED_SECURE : SIG_LOCKED_RAW_SECURE;
     } else {
         signature = canCompress ? SIG_UNLOCKED : SIG_UNLOCKED_RAW;
     }
@@ -175,7 +192,18 @@ async function handleEncode(
     const totalValidCount = (pixels.length / 4) * 3;
     const bodyValidCount = totalValidCount - headerValidCount;
 
-    const { start, step } = initLCG(salt, bodyValidCount);
+    // Seed Derivation Logic
+    let seed: number;
+    if (hasPassword) {
+        // Always Secure Logic
+        seed = await deriveScatteringSeed(salt, password!);
+    } else {
+        // Legacy/Unlocked Logic: Salt only
+        const saltView = new DataView(salt.buffer);
+        seed = saltView.getUint32(0, true);
+    }
+
+    const { start, step } = initLCG(seed, bodyValidCount);
 
     const needed = dataBitsLength;
     let lastReportTime = performance.now();
@@ -233,12 +261,23 @@ async function handleDecode(id: string, pixels: PixelArray, password?: string) {
     // Extract Header
     const sig = readBits(16);
 
-    const isCompressed = (sig === SIG_UNLOCKED || sig === SIG_LOCKED);
-    const isRaw = (sig === SIG_UNLOCKED_RAW || sig === SIG_LOCKED_RAW);
+    // Check Signature Type
+    // REMOVED: Legacy Locked support
+    const isSecureLocked = (sig === SIG_LOCKED_SECURE || sig === SIG_LOCKED_RAW_SECURE);
+    const isUnlocked = (sig === SIG_UNLOCKED || sig === SIG_UNLOCKED_RAW);
 
-    if (!isCompressed && !isRaw) {
+    if (!isSecureLocked && !isUnlocked) {
+        // If signature matches old locked signatures, specifically fail
+        // The previous values were "DL" and "DK"
+        // "DL" = 0100010001001100
+        // "DK" = 0100010001001011
+        if (sig === "0100010001001100" || sig === "0100010001001011") {
+             throw new Error("Legacy format detected. This secure version does not support old images.");
+        }
         throw new Error("No DontSee signature found");
     }
+
+    const isCompressed = (sig === SIG_UNLOCKED || sig === SIG_LOCKED_SECURE);
 
     const saltBits = readBits(128);
     const salt = new Uint8Array(16);
@@ -259,7 +298,17 @@ async function handleDecode(id: string, pixels: PixelArray, password?: string) {
     const totalValidCount = (pixels.length / 4) * 3;
     const bodyValidCount = totalValidCount - headerValidCount;
 
-    const { start, step } = initLCG(salt, bodyValidCount);
+    let seed: number;
+    if (isSecureLocked) {
+        // Always use Secure Logic for locked images
+        seed = await deriveScatteringSeed(salt, password || "");
+    } else {
+        // Unlocked Logic
+        const saltView = new DataView(salt.buffer);
+        seed = saltView.getUint32(0, true);
+    }
+
+    const { start, step } = initLCG(seed, bodyValidCount);
 
     const bodyBits = new Uint8Array(dataBitLength);
     let lastReportTime = performance.now();
@@ -330,8 +379,12 @@ function handleScan(id: string, pixels: PixelArray) {
     }
 
     let result = null;
-    if (sig === SIG_LOCKED || sig === SIG_LOCKED_RAW) result = 'locked';
-    else if (sig === SIG_UNLOCKED || sig === SIG_UNLOCKED_RAW) result = 'unlocked';
+    // Only new signatures are recognized
+    if (sig === SIG_LOCKED_SECURE || sig === SIG_LOCKED_RAW_SECURE) {
+        result = 'locked';
+    } else if (sig === SIG_UNLOCKED || sig === SIG_UNLOCKED_RAW) {
+        result = 'unlocked';
+    }
 
     postMessage({ id, success: true, signature: result });
 }
