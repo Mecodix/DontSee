@@ -32,7 +32,12 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
                     ref={ref}
                     type={inputType}
                     className={cn(
-                        "w-full bg-white/5 border border-white/10 text-white text-base rounded-2xl py-4 transition-all duration-300 placeholder:text-gray-600 focus:outline-none focus:border-primary/50 focus:bg-white/[0.07] focus:shadow-[0_0_20px_rgba(168,85,247,0.15)]",
+                        "w-full bg-white/5 border border-white/10 text-white text-base rounded-2xl py-4 transition-all duration-300 placeholder:text-gray-600 focus:outline-none focus:bg-white/[0.07]",
+                        // Condition: Only apply purple border and glow if type is PASSWORD.
+                        // If visible text, apply neutral white border/text.
+                        inputType === 'password'
+                             ? "focus:border-primary/50 focus:shadow-[0_0_20px_rgba(168,85,247,0.15)]"
+                             : "focus:border-white/30 focus:shadow-none",
                         startIcon ? "pl-12" : "pl-4",
                         isPassword ? "pr-12" : "pr-4",
                         error

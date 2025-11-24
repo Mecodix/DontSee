@@ -41,12 +41,7 @@ function getPhysicalIndex(logicalIndex: number): number {
     return (q * 4) + r;
 }
 
-// Removed Adaptive Scattering for Stability
-// Previously: isPixelNoisy checks for variance.
-// Removed because saving images (Canvas -> PNG) can introduce subtle color changes
-// or alpha handling that alters pixel values by 1 bit, breaking the read path.
-
-// Shared LCG / Scatter Logic - Pure RNG (Deterministic from Password)
+// Shared LCG / Scatter Logic - Pure RNG
 function createScatterIterator(seed: number, bodyValidCount: number) {
     const random = mulberry32(seed);
 
@@ -70,17 +65,19 @@ function createScatterIterator(seed: number, bodyValidCount: number) {
     };
 }
 
-// Derive Key AND Salt from Password
-// Double-Derive: SHA-256(Password) -> KeyMaterial.
-// Split KeyMaterial -> UserKey (for encryption) + Salt (for scattering)
-async function deriveSecrets(password: string) {
+// Derive Key AND Salt from Password + Dimensions
+// Solution 1: getStableScatterSeed concept merged into deriveSecrets
+async function deriveSecrets(password: string, width: number, height: number) {
     const enc = new TextEncoder();
-    const keyMaterial = await crypto.subtle.digest('SHA-256', enc.encode(password));
+
+    // Hash (Password + Width + Height) to get Key Material
+    // This creates a unique key/seed per image dimension, providing robust "Stable Dimensions Check".
+    const dataToHash = enc.encode(`${password}:${width}:${height}`);
+    const keyMaterial = await crypto.subtle.digest('SHA-256', dataToHash);
     const keyBytes = new Uint8Array(keyMaterial);
 
-    // Use first 16 bytes as Salt, next 16 bytes as "Pre-Key" for Argon2
+    // Use first 16 bytes as Salt
     const salt = keyBytes.slice(0, 16);
-    // preKey is implicitly used via argon2id call logic (internally handled)
 
     const rawKey = await argon2id({
         password: password,
@@ -131,28 +128,38 @@ async function handleEncode(
 ) {
     if (!password) throw new Error("Password is required for secure encoding.");
 
-    // 1. Secrets Derivation
-    const { key, seed } = await deriveSecrets(password);
+    // 1. Secrets Derivation (now uses dimensions)
+    const { key, seed } = await deriveSecrets(password, width, height);
 
     // 2. Prepare Payload
-    let dataPayload: Uint8Array;
+    let actualData: Uint8Array;
     if (supportsCompression()) {
-        dataPayload = await compress(message);
+        actualData = await compress(message);
     } else {
-        dataPayload = new TextEncoder().encode(message);
+        actualData = new TextEncoder().encode(message);
     }
+
+    // Solution 2: Store Dimensions in Payload Header
+    // Header = [Width (4 bytes)][Height (4 bytes)]
+    const dimHeader = new Uint8Array(8);
+    const view = new DataView(dimHeader.buffer);
+    view.setUint32(0, width, true);
+    view.setUint32(4, height, true);
+
+    const fullPayload = new Uint8Array(dimHeader.length + actualData.length);
+    fullPayload.set(dimHeader, 0);
+    fullPayload.set(actualData, 8);
 
     const iv = crypto.getRandomValues(new Uint8Array(12)); // 96 bits
 
-    // 3. AAD Binding (Simplified to Version Tag)
-    // Removed strict dimension binding to prevent failures if browser slightly alters metadata or padding.
-    // The password is the primary security.
+    // 3. AAD Binding
+    // We stick to simple versioning for AAD, relying on the Payload Dimension Check for anti-transplant.
     const aad = new TextEncoder().encode("DontSee_v1");
 
     const encryptedBuffer = await crypto.subtle.encrypt(
         { name: "AES-GCM", iv: iv, additionalData: aad },
         key,
-        dataPayload
+        fullPayload
     );
     const encryptedBytes = new Uint8Array(encryptedBuffer);
     const dataBitsLength = encryptedBytes.length * 8;
@@ -167,7 +174,7 @@ async function handleEncode(
          throw new Error("Message too long for this image size");
     }
 
-    // 5. Writing Phase (Scattered RNG Only)
+    // 5. Writing Phase
     const bodyValidCount = (pixels.length / 4) * 3;
     const iterator = createScatterIterator(seed, bodyValidCount);
 
@@ -175,16 +182,13 @@ async function handleEncode(
 
     const getBit = (i: number): number => {
         if (i < IV_BITS) {
-            // IV
             const byteIdx = Math.floor(i / 8);
             const bitIdx = 7 - (i % 8);
             return (iv[byteIdx] >>> bitIdx) & 1;
         } else if (i < IV_BITS + LENGTH_BITS) {
-            // Length
             const lenOffset = i - IV_BITS;
              return parseInt(dataBitsLength.toString(2).padStart(32, '0')[lenOffset]);
         } else {
-            // Body
             const bodyOffset = i - (IV_BITS + LENGTH_BITS);
             const byteIdx = Math.floor(bodyOffset / 8);
             const bitIdx = 7 - (bodyOffset % 8);
@@ -193,7 +197,6 @@ async function handleEncode(
     };
 
     for (let i = 0; i < totalPayloadBits; i++) {
-        // Progress
         if (i % 1000 === 0) {
             const now = performance.now();
             if (now - lastReportTime > 33) {
@@ -211,7 +214,6 @@ async function handleEncode(
         else pixels[targetIdx] &= ~1;
     }
 
-    // Finalize
     postMessage({ id, success: true, progress: 100 });
 
     if (canvas && ctx) {
@@ -227,13 +229,12 @@ async function handleEncode(
 async function handleDecode(id: string, pixels: PixelArray, width: number, height: number, password?: string) {
     if (!password) throw new Error("Password required to decrypt.");
 
-    // 1. Derive Secrets (Must match Encode)
-    const { key, seed } = await deriveSecrets(password);
+    // 1. Derive Secrets (Using Dimensions)
+    const { key, seed } = await deriveSecrets(password, width, height);
 
     const bodyValidCount = (pixels.length / 4) * 3;
     const iterator = createScatterIterator(seed, bodyValidCount);
 
-    // Helper to read N bits from the scatter stream
     const readBits = (count: number): string => {
         let bits = "";
         for(let i=0; i<count; i++) {
@@ -252,7 +253,6 @@ async function handleDecode(id: string, pixels: PixelArray, width: number, heigh
     const lenBits = readBits(LENGTH_BITS);
     const dataBitLength = parseInt(lenBits, 2);
 
-    // Sanity Check
     if (dataBitLength <= 0 || dataBitLength > bodyValidCount) {
         throw new Error("Invalid password or no message found.");
     }
@@ -282,29 +282,42 @@ async function handleDecode(id: string, pixels: PixelArray, width: number, heigh
         }
     }
 
-    // 5. Decrypt with AAD Check
+    // 5. Decrypt
     try {
-        const aad = new TextEncoder().encode("DontSee_v1"); // Simplified AAD
+        const aad = new TextEncoder().encode("DontSee_v1");
 
         const decryptedBuf = await crypto.subtle.decrypt(
             { name: "AES-GCM", iv: iv, additionalData: aad },
             key,
             encryptedBytes
         );
-        const decryptedBytes = new Uint8Array(decryptedBuf);
+        const fullPayload = new Uint8Array(decryptedBuf);
 
-        // Decompress if needed
+        // 6. Verify Dimensions (Solution 2)
+        if (fullPayload.length < 8) throw new Error("Payload too short");
+
+        const view = new DataView(fullPayload.buffer);
+        const storedWidth = view.getUint32(0, true);
+        const storedHeight = view.getUint32(4, true);
+
+        if (storedWidth !== width || storedHeight !== height) {
+            throw new Error("Data integrity mismatch: Image dimensions do not match signed payload.");
+        }
+
+        const actualData = fullPayload.slice(8);
+
+        // Decompress
         let text: string;
-        const isGzip = decryptedBytes.length >= 2 && decryptedBytes[0] === 0x1F && decryptedBytes[1] === 0x8B;
+        const isGzip = actualData.length >= 2 && actualData[0] === 0x1F && actualData[1] === 0x8B;
 
         if (isGzip) {
             if (supportsCompression()) {
-                text = await decompress(decryptedBytes);
+                text = await decompress(actualData);
             } else {
                 throw new Error("Compressed data found but decompression unsupported.");
             }
         } else {
-            text = new TextDecoder().decode(decryptedBytes);
+            text = new TextDecoder().decode(actualData);
         }
 
         postMessage({ id, success: true, text });
@@ -341,7 +354,7 @@ self.onmessage = async (e: MessageEvent) => {
             }
         } else if (imageData) {
             pixels = new Uint8ClampedArray(imageData);
-            width = imageData.width; // ImageData has width/height props
+            width = imageData.width;
             height = imageData.height;
         } else {
             throw new Error("No image data provided");
@@ -352,7 +365,6 @@ self.onmessage = async (e: MessageEvent) => {
         } else if (type === 'decode') {
             await handleDecode(id, pixels, width, height, password);
         } else if (type === 'scan') {
-             // Scan is now impossible/irrelevant in True Stego
              postMessage({ id, success: true, signature: null });
         }
     } catch (err) {

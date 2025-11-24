@@ -10,7 +10,7 @@ interface TypewriterSubtitleProps {
 
 export const TypewriterSubtitle: React.FC<TypewriterSubtitleProps> = ({
     texts,
-    speed = 40,
+    speed = 50,
     pause = 2000
 }) => {
     const [currentTextIndex, setCurrentTextIndex] = useState(0);
@@ -24,31 +24,47 @@ export const TypewriterSubtitle: React.FC<TypewriterSubtitleProps> = ({
             const currentFullText = texts[currentTextIndex];
 
             if (isDeleting) {
-                // Deleting text
-                setDisplayedText(prev => prev.substring(0, prev.length - 1));
+                // Deleting Phase: Reduce text length
+                setDisplayedText(prev => {
+                    if (prev.length === 0) return '';
+                    return prev.substring(0, prev.length - 1);
+                });
             } else {
-                // Typing text
-                setDisplayedText(currentFullText.substring(0, displayedText.length + 1));
-            }
-
-            // Determine next state
-            if (!isDeleting && displayedText === currentFullText) {
-                // Finished typing, pause before deleting
-                timer = setTimeout(() => setIsDeleting(true), pause);
-            } else if (isDeleting && displayedText === '') {
-                // Finished deleting, move to next text
-                setIsDeleting(false);
-                setCurrentTextIndex((prev) => (prev + 1) % texts.length);
-            } else {
-                // Continue typing/deleting
-                const typingSpeed = isDeleting ? speed / 3 : speed;
-                timer = setTimeout(handleTyping, typingSpeed);
+                // Typing Phase: Increase text length
+                setDisplayedText(prev => {
+                    if (prev.length === currentFullText.length) return prev;
+                    return currentFullText.substring(0, prev.length + 1);
+                });
             }
         };
 
-        timer = setTimeout(handleTyping, speed);
+        // Determine delay and next action *before* scheduling
+        let delay = speed;
 
+        if (isDeleting) {
+            delay = speed / 2; // Delete faster
+            if (displayedText === '') {
+                // Finished deleting, switch to next text
+                setIsDeleting(false);
+                setCurrentTextIndex((prev) => (prev + 1) % texts.length);
+                delay = 500; // Pause briefly before typing next
+            }
+        } else {
+            // Typing
+            if (displayedText === texts[currentTextIndex]) {
+                 // Finished typing
+                 delay = pause; // Long pause before deleting
+                 if (!isDeleting) {
+                     // Only schedule delete if we aren't already deleting (prevent double triggers)
+                     timer = setTimeout(() => setIsDeleting(true), pause);
+                     return () => clearTimeout(timer);
+                 }
+            }
+        }
+
+        timer = setTimeout(handleTyping, delay);
         return () => clearTimeout(timer);
+
     }, [displayedText, isDeleting, currentTextIndex, texts, speed, pause]);
 
     return (
@@ -57,7 +73,7 @@ export const TypewriterSubtitle: React.FC<TypewriterSubtitleProps> = ({
                 {displayedText}
                 <span className={cn(
                     "w-[2px] h-[1.2em] bg-primary ml-1 block",
-                    "animate-blink-caret" // We will define this animation in tailwind config or global css
+                    "animate-blink-caret"
                 )}></span>
             </Typography>
         </div>
