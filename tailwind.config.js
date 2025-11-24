@@ -36,6 +36,7 @@ export default {
         'fade-in': 'fadeIn 0.2s ease-out forwards',
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'spin-slow': 'spin 1.5s linear infinite',
+        'blink-caret': 'blink-caret 1s step-end infinite',
       },
       keyframes: {
         enter: {
@@ -49,6 +50,10 @@ export default {
         pulse: {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.5' },
+        },
+        'blink-caret': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0' },
         }
       }
     }

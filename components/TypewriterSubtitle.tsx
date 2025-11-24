@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Typography } from './ui/Typography';
+import { cn } from '../utils/cn';
 
 interface TypewriterSubtitleProps {
     texts: string[];
@@ -9,7 +10,7 @@ interface TypewriterSubtitleProps {
 
 export const TypewriterSubtitle: React.FC<TypewriterSubtitleProps> = ({
     texts,
-    speed = 50,
+    speed = 40,
     pause = 2000
 }) => {
     const [currentTextIndex, setCurrentTextIndex] = useState(0);
@@ -40,7 +41,7 @@ export const TypewriterSubtitle: React.FC<TypewriterSubtitleProps> = ({
                 setCurrentTextIndex((prev) => (prev + 1) % texts.length);
             } else {
                 // Continue typing/deleting
-                const typingSpeed = isDeleting ? speed / 2 : speed;
+                const typingSpeed = isDeleting ? speed / 3 : speed;
                 timer = setTimeout(handleTyping, typingSpeed);
             }
         };
@@ -51,9 +52,14 @@ export const TypewriterSubtitle: React.FC<TypewriterSubtitleProps> = ({
     }, [displayedText, isDeleting, currentTextIndex, texts, speed, pause]);
 
     return (
-        <Typography variant="body" className="text-gray-500 max-w-sm mx-auto h-[1.5em] flex items-center justify-center">
-            {displayedText}
-            <span className="animate-pulse ml-1 text-primary">|</span>
-        </Typography>
+        <div className="h-[1.5em] flex items-center justify-center max-w-sm mx-auto overflow-hidden">
+            <Typography variant="body" className="text-gray-400 font-medium tracking-wide relative inline-flex items-center">
+                {displayedText}
+                <span className={cn(
+                    "w-[2px] h-[1.2em] bg-primary ml-1 block",
+                    "animate-blink-caret" // We will define this animation in tailwind config or global css
+                )}></span>
+            </Typography>
+        </div>
     );
 };

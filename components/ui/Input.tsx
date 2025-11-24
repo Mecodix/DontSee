@@ -17,7 +17,14 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         return (
             <div className="relative w-full group">
                 {startIcon && (
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500 group-focus-within:text-primary transition-colors duration-300">
+                    <div className={cn(
+                        "absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-all duration-300",
+                        // Logic: If inputType is 'password' (hidden), allow glow on focus.
+                        // If 'text' (visible), stay neutral gray/white even on focus.
+                        inputType === 'password'
+                            ? "text-gray-500 group-focus-within:text-primary group-focus-within:drop-shadow-[0_0_8px_rgba(168,85,247,0.5)]"
+                            : "text-gray-500 group-focus-within:text-white"
+                    )}>
                         {startIcon}
                     </div>
                 )}
