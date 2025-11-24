@@ -21,9 +21,12 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
                         "absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-all duration-300",
                         // Logic: If inputType is 'password' (hidden), allow glow on focus.
                         // If 'text' (visible), stay neutral gray/white even on focus.
-                        inputType === 'password'
-                            ? "text-gray-500 group-focus-within:text-primary group-focus-within:drop-shadow-[0_0_8px_rgba(168,85,247,0.5)]"
-                            : "text-gray-500 group-focus-within:text-white"
+                        isPassword
+                            ? (showPassword
+                                ? "text-gray-500" // Visible: No glow, gray
+                                : "text-primary drop-shadow-[0_0_8px_rgba(168,85,247,0.5)]" // Hidden: Purple glow ALWAYS
+                              )
+                            : "text-gray-500 group-focus-within:text-white" // Standard behavior
                     )}>
                         {startIcon}
                     </div>
@@ -55,9 +58,6 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
                         aria-label={showPassword ? "Hide password" : "Show password"}
                     >
                          {showPassword ? (
-                             // Re-using IconBlinkingEye but it has animation, might want a static one?
-                             // User asked for "eye icon". IconBlinkingEye is the only 'open eye' we have.
-                             // It's fine.
                              <IconBlinkingEye className="w-5 h-5" />
                          ) : (
                              <IconEyeOff className="w-5 h-5" />
