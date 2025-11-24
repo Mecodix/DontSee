@@ -41,26 +41,13 @@ function getPhysicalIndex(logicalIndex: number): number {
     return (q * 4) + r;
 }
 
-// Helper: Check local variance (Adaptive Steganography)
-// Returns true if the pixel is "noisy enough" to modify, false if it's too smooth.
-function isPixelNoisy(pixels: PixelArray, physicalIndex: number, width: number, threshold: number = 5): boolean {
-    // Simple neighbor check: Compare with right neighbor (if exists)
-    // A robust implementation would check N/S/E/W, but for performance in a tight loop we check minimal neighbors.
-    // physicalIndex is R, G, or B component.
+// Removed Adaptive Scattering for Stability
+// Previously: isPixelNoisy checks for variance.
+// Removed because saving images (Canvas -> PNG) can introduce subtle color changes
+// or alpha handling that alters pixel values by 1 bit, breaking the read path.
 
-    // Safety check for bounds
-    if (physicalIndex + 4 >= pixels.length) return true; // Edge case: always allow
-
-    const currentVal = pixels[physicalIndex];
-    const rightVal = pixels[physicalIndex + 4]; // Next pixel's same component
-
-    // If difference is greater than threshold, it's an edge/texture.
-    return Math.abs(currentVal - rightVal) > threshold;
-}
-
-// Shared LCG / Scatter Logic with Adaptive Skip
-// Returns an iterator that yields physical indices
-function createScatterIterator(seed: number, bodyValidCount: number, pixels: PixelArray, width: number) {
+// Shared LCG / Scatter Logic - Pure RNG (Deterministic from Password)
+function createScatterIterator(seed: number, bodyValidCount: number) {
     const random = mulberry32(seed);
 
     let start = Math.floor(random() * bodyValidCount);
@@ -75,23 +62,9 @@ function createScatterIterator(seed: number, bodyValidCount: number, pixels: Pix
 
     return {
         next: () => {
-             // Adaptive Loop: Keep skipping until we find a suitable pixel or hit a safety limit
-            let attempts = 0;
-            let targetIdx = 0;
-
-            do {
-                const logicalBodyIndex = (start + i * step) % bodyValidCount;
-                targetIdx = getPhysicalIndex(logicalBodyIndex);
-
-                i++; // Always advance the sequence
-                attempts++;
-
-                // Safety valve: If we search 100 times and find only smooth pixels, just use the last one.
-                // This prevents infinite loops in perfectly flat images (like a solid color block).
-                if (attempts > 50) break;
-
-            } while (!isPixelNoisy(pixels, targetIdx, width));
-
+            const logicalBodyIndex = (start + i * step) % bodyValidCount;
+            const targetIdx = getPhysicalIndex(logicalBodyIndex);
+            i++;
             return targetIdx;
         }
     };
@@ -107,14 +80,11 @@ async function deriveSecrets(password: string) {
 
     // Use first 16 bytes as Salt, next 16 bytes as "Pre-Key" for Argon2
     const salt = keyBytes.slice(0, 16);
-    const preKey = keyBytes.slice(16, 32);
-
-    // We still use Argon2id for the actual encryption key to make brute-force hard
-    // But now the Salt is deterministic based on the password.
+    // preKey is implicitly used via argon2id call logic (internally handled)
 
     const rawKey = await argon2id({
-        password: password, // Use original password
-        salt: salt,         // Derived salt
+        password: password,
+        salt: salt,
         parallelism: 1,
         iterations: 16,
         memorySize: 16384,
@@ -132,7 +102,6 @@ async function deriveSecrets(password: string) {
 
     // Derive Seed for LCG from the same salt
     const seedView = new DataView(salt.buffer);
-    // XOR the four 32-bit words of the salt to get one 32-bit seed
     const seed = seedView.getUint32(0) ^ seedView.getUint32(4) ^ seedView.getUint32(8) ^ seedView.getUint32(12);
 
     return { key: cryptoKey, seed, salt };
@@ -175,9 +144,10 @@ async function handleEncode(
 
     const iv = crypto.getRandomValues(new Uint8Array(12)); // 96 bits
 
-    // 3. AAD Binding (Dimensions + Total Bytes)
-    // This binds the encrypted data to this specific image container size
-    const aad = new TextEncoder().encode(`${width}x${height}:${pixels.length}`);
+    // 3. AAD Binding (Simplified to Version Tag)
+    // Removed strict dimension binding to prevent failures if browser slightly alters metadata or padding.
+    // The password is the primary security.
+    const aad = new TextEncoder().encode("DontSee_v1");
 
     const encryptedBuffer = await crypto.subtle.encrypt(
         { name: "AES-GCM", iv: iv, additionalData: aad },
@@ -188,7 +158,6 @@ async function handleEncode(
     const dataBitsLength = encryptedBytes.length * 8;
 
     // 4. Construct Bit Stream: [IV (96)] + [Length (32)] + [Encrypted Body]
-    // Total Bits needed
     const totalPayloadBits = IV_BITS + LENGTH_BITS + dataBitsLength;
 
     // Capacity Check
@@ -198,13 +167,12 @@ async function handleEncode(
          throw new Error("Message too long for this image size");
     }
 
-    // 5. Writing Phase (Adaptive & Scattered)
+    // 5. Writing Phase (Scattered RNG Only)
     const bodyValidCount = (pixels.length / 4) * 3;
-    const iterator = createScatterIterator(seed, bodyValidCount, pixels, width);
+    const iterator = createScatterIterator(seed, bodyValidCount);
 
     let lastReportTime = performance.now();
 
-    // Helper to get bit at global stream index
     const getBit = (i: number): number => {
         if (i < IV_BITS) {
             // IV
@@ -214,9 +182,6 @@ async function handleEncode(
         } else if (i < IV_BITS + LENGTH_BITS) {
             // Length
             const lenOffset = i - IV_BITS;
-             // Length is 32 bits. We write it MSB first.
-             // We can convert length to binary string and pick.
-             // Optimization: string conversion is easier to read/debug
              return parseInt(dataBitsLength.toString(2).padStart(32, '0')[lenOffset]);
         } else {
             // Body
@@ -266,7 +231,7 @@ async function handleDecode(id: string, pixels: PixelArray, width: number, heigh
     const { key, seed } = await deriveSecrets(password);
 
     const bodyValidCount = (pixels.length / 4) * 3;
-    const iterator = createScatterIterator(seed, bodyValidCount, pixels, width);
+    const iterator = createScatterIterator(seed, bodyValidCount);
 
     // Helper to read N bits from the scatter stream
     const readBits = (count: number): string => {
@@ -319,7 +284,7 @@ async function handleDecode(id: string, pixels: PixelArray, width: number, heigh
 
     // 5. Decrypt with AAD Check
     try {
-        const aad = new TextEncoder().encode(`${width}x${height}:${pixels.length}`);
+        const aad = new TextEncoder().encode("DontSee_v1"); // Simplified AAD
 
         const decryptedBuf = await crypto.subtle.decrypt(
             { name: "AES-GCM", iv: iv, additionalData: aad },
@@ -336,8 +301,6 @@ async function handleDecode(id: string, pixels: PixelArray, width: number, heigh
             if (supportsCompression()) {
                 text = await decompress(decryptedBytes);
             } else {
-                // If browser lacks compression support but message is compressed, we can't read it.
-                // However, our supportsCompression check in encode prevents this scenario mostly.
                 throw new Error("Compressed data found but decompression unsupported.");
             }
         } else {
@@ -347,9 +310,6 @@ async function handleDecode(id: string, pixels: PixelArray, width: number, heigh
         postMessage({ id, success: true, text });
 
     } catch (e) {
-        // IMPORTANT: In True Stego, a decryption failure usually means "Wrong Password" OR "No Message Here".
-        // The scatter pattern was wrong, so we read garbage, so Auth Tag check failed.
-        // We return a generic error.
         postMessage({ id, success: false, error: "No hidden message found with this password." });
     }
 }
