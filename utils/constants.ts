@@ -12,3 +12,5 @@ export const GZIP_MARGIN_BITS = 240;
 
 // Total overhead bits reserved in capacity calculation
 export const TOTAL_OVERHEAD_BITS = SEQUENTIAL_BITS + SCATTERED_METADATA_BITS + GZIP_MARGIN_BITS;
+
+export const ENCRYPTION_AAD = "DontSee_v1";
