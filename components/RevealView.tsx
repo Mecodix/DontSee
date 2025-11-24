@@ -49,15 +49,15 @@ export const RevealView: React.FC<RevealViewProps> = ({
             )}
 
             {decodedMessage && (
-                <div className="animate-slide-up">
-                    {/* Fixed Height Container, no glow */}
-                    <div className="bg-white/5 border border-white/10 rounded-2xl p-5 h-48 flex flex-col shadow-inner">
-                         {/*
-                             Using a raw pre tag for reliable scrolling of content.
-                             ExpandableTextarea was causing issues with nesting/scrolling.
-                             User wants fixed size and scrollable.
-                         */}
-                         <div className="flex-1 w-full h-full overflow-y-auto pr-2 custom-scrollbar text-primary font-mono text-sm leading-relaxed break-words whitespace-pre-wrap">
+                <div className="animate-slide-up relative group">
+                    {/* Label Label */}
+                    <div className="absolute -top-3 left-4 bg-[#05050A] px-2 text-xs font-bold text-primary/80 uppercase tracking-wider z-10">
+                        Decoded Text
+                    </div>
+
+                    {/* Expandable Container */}
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-5 min-h-[100px] max-h-[300px] flex flex-col shadow-inner transition-all duration-300">
+                         <div className="flex-1 w-full h-full overflow-y-auto pr-2 custom-scrollbar text-white/90 font-sans text-base leading-relaxed break-words whitespace-pre-wrap">
                             {decodedMessage}
                          </div>
                     </div>

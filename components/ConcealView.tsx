@@ -127,10 +127,10 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                     <a
                         href={resultBlobUrl}
                         download={downloadName}
-                        className="w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-lg shadow-primary/20 hover:shadow-primary/40 group border border-white/10"
+                        className="w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center transition-all duration-200 transform hover:scale-105 active:scale-95 hover:border-primary/50 group border border-white/10 shadow-sm"
                         aria-label="Download encoded image"
                     >
-                        <IconDownload className="w-6 h-6 group-hover:animate-bounce" />
+                        <IconDownload className="w-6 h-6" />
                     </a>
                 </div>
             ) : (
