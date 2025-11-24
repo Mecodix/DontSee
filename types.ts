@@ -27,6 +27,8 @@ export interface WorkerRequest {
     imageBitmap?: ImageBitmap;
     // Legacy support for scan (ArrayBuffer is faster for small reads) or fallback
     imageData?: ArrayBuffer;
+    width?: number;
+    height?: number;
     password?: string;
     message?: string;
 }

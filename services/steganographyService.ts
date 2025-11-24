@@ -134,6 +134,8 @@ class SteganographyService {
                 result = await this.sendRequest({
                     type: 'encode',
                     imageData: pixelData.buffer, // Transfer this buffer
+                    width: imageBitmap.width,
+                    height: imageBitmap.height,
                     message,
                     password: password || ''
                 }, [pixelData.buffer], onProgress);
@@ -187,6 +189,8 @@ class SteganographyService {
                  result = await this.sendRequest({
                     type: 'decode',
                     imageData: pixelData.buffer,
+                    width: imageBitmap.width,
+                    height: imageBitmap.height,
                     password: password || ''
                  }, [pixelData.buffer], onProgress);
             } else {

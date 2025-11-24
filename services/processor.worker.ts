@@ -1,7 +1,8 @@
 import { argon2id } from 'hash-wasm';
 import {
     IV_BITS,
-    LENGTH_BITS
+    LENGTH_BITS,
+    ENCRYPTION_AAD
 } from '../utils/constants';
 
 // Types
@@ -154,7 +155,7 @@ async function handleEncode(
 
     // 3. AAD Binding
     // We stick to simple versioning for AAD, relying on the Payload Dimension Check for anti-transplant.
-    const aad = new TextEncoder().encode("DontSee_v1");
+    const aad = new TextEncoder().encode(ENCRYPTION_AAD);
 
     const encryptedBuffer = await crypto.subtle.encrypt(
         { name: "AES-GCM", iv: iv, additionalData: aad },
@@ -284,7 +285,7 @@ async function handleDecode(id: string, pixels: PixelArray, width: number, heigh
 
     // 5. Decrypt
     try {
-        const aad = new TextEncoder().encode("DontSee_v1");
+        const aad = new TextEncoder().encode(ENCRYPTION_AAD);
 
         const decryptedBuf = await crypto.subtle.decrypt(
             { name: "AES-GCM", iv: iv, additionalData: aad },
@@ -354,8 +355,11 @@ self.onmessage = async (e: MessageEvent) => {
             }
         } else if (imageData) {
             pixels = new Uint8ClampedArray(imageData);
-            width = imageData.width;
-            height = imageData.height;
+            if (!e.data.width || !e.data.height) {
+                throw new Error("Missing dimensions for raw pixel data");
+            }
+            width = e.data.width;
+            height = e.data.height;
         } else {
             throw new Error("No image data provided");
         }

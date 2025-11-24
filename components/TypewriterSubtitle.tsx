@@ -13,59 +13,43 @@ export const TypewriterSubtitle: React.FC<TypewriterSubtitleProps> = ({
     speed = 50,
     pause = 2000
 }) => {
-    const [currentTextIndex, setCurrentTextIndex] = useState(0);
     const [displayedText, setDisplayedText] = useState('');
-    const [isDeleting, setIsDeleting] = useState(false);
+    const [currentTextIndex, setCurrentTextIndex] = useState(0);
+    const [phase, setPhase] = useState<'typing' | 'pausing' | 'deleting'>('typing');
 
     useEffect(() => {
-        let timer: NodeJS.Timeout;
+        let timeout: NodeJS.Timeout;
 
-        const handleTyping = () => {
-            const currentFullText = texts[currentTextIndex];
+        const currentFullText = texts[currentTextIndex];
 
-            if (isDeleting) {
-                // Deleting Phase: Reduce text length
-                setDisplayedText(prev => {
-                    if (prev.length === 0) return '';
-                    return prev.substring(0, prev.length - 1);
-                });
+        if (phase === 'typing') {
+            if (displayedText.length < currentFullText.length) {
+                timeout = setTimeout(() => {
+                    setDisplayedText(currentFullText.slice(0, displayedText.length + 1));
+                }, speed);
             } else {
-                // Typing Phase: Increase text length
-                setDisplayedText(prev => {
-                    if (prev.length === currentFullText.length) return prev;
-                    return currentFullText.substring(0, prev.length + 1);
-                });
+                // Finished typing, switch to pause
+                setPhase('pausing');
             }
-        };
-
-        // Determine delay and next action *before* scheduling
-        let delay = speed;
-
-        if (isDeleting) {
-            delay = speed / 2; // Delete faster
-            if (displayedText === '') {
+        } else if (phase === 'pausing') {
+            // Wait for 'pause' duration then switch to deleting
+            timeout = setTimeout(() => {
+                setPhase('deleting');
+            }, pause);
+        } else if (phase === 'deleting') {
+            if (displayedText.length > 0) {
+                timeout = setTimeout(() => {
+                    setDisplayedText(prev => prev.slice(0, -1));
+                }, speed / 2);
+            } else {
                 // Finished deleting, switch to next text
-                setIsDeleting(false);
                 setCurrentTextIndex((prev) => (prev + 1) % texts.length);
-                delay = 500; // Pause briefly before typing next
-            }
-        } else {
-            // Typing
-            if (displayedText === texts[currentTextIndex]) {
-                 // Finished typing
-                 delay = pause; // Long pause before deleting
-                 if (!isDeleting) {
-                     // Only schedule delete if we aren't already deleting (prevent double triggers)
-                     timer = setTimeout(() => setIsDeleting(true), pause);
-                     return () => clearTimeout(timer);
-                 }
+                setPhase('typing');
             }
         }
 
-        timer = setTimeout(handleTyping, delay);
-        return () => clearTimeout(timer);
-
-    }, [displayedText, isDeleting, currentTextIndex, texts, speed, pause]);
+        return () => clearTimeout(timeout);
+    }, [displayedText, phase, currentTextIndex, texts, speed, pause]);
 
     return (
         <div className="h-[1.5em] flex items-center justify-center max-w-sm mx-auto overflow-hidden">
