@@ -4,44 +4,59 @@
 
 @layer base {
   :root {
-    /* Core Surface Colors */
-    --color-surface: 20 18 24;           /* #141218 */
-    --color-surface-container: 29 27 32; /* #1d1b20 */
-    --color-surface-raised: 43 41 48;    /* #2b2930 */
-    --color-surface-error: 63 46 77;     /* #3f2e4d */
-
-    /* Primary Accent */
-    --color-primary: 208 188 255;        /* #d0bcff */
-    --color-on-primary: 56 30 114;       /* #381e72 */
-
-    /* Secondary / UI Elements */
-    --color-secondary-container: 74 68 88; /* #4a4458 */
-    --color-secondary-hover: 92 86 107;    /* #5c566b */
-    --color-outline: 147 143 153;          /* #938f99 */
-
-    /* Error States */
-    --color-error: 242 184 181;          /* #f2b8b5 */
-    --color-error-container: 140 29 24;  /* #8c1d18 */
+    --color-background: 10 10 10;
+    --color-surface: 18 18 18;
   }
 
   body {
-    background-color: rgb(var(--color-surface));
-    color: #e6e1e5;
+    background-color: #0a0a0a;
+    color: #f3f4f6;
     -webkit-tap-highlight-color: transparent;
+    font-family: 'DM Sans', sans-serif;
+    /* Subtle radial gradient for depth */
+    background-image:
+      radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.15), transparent 40%),
+      radial-gradient(circle at 0% 100%, rgba(168, 85, 247, 0.05), transparent 30%);
+    background-attachment: fixed;
+  }
+
+  /* Headings */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', sans-serif;
+    letter-spacing: -0.03em; /* tracking-tight */
   }
 
   /* Custom scrollbar for aesthetics */
   ::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: rgb(var(--color-surface));
+    background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgb(var(--color-secondary-container));
-    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 99px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgb(var(--color-primary));
+    background: rgba(139, 92, 246, 0.5);
   }
+
+  /* Remove default outline, use ring for focus */
+  :focus-visible {
+    outline: none;
+  }
+}
+
+/* Utilities for noise texture if needed later */
+.bg-noise {
+  position: relative;
+}
+.bg-noise::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+  pointer-events: none;
+  opacity: 0.4;
+  z-index: -1;
 }

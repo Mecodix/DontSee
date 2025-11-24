@@ -3,7 +3,8 @@ import { IconLock, IconZap } from './Icons';
 import { AppImage, ProcessingStage } from '../types';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
-import { ExpandableTextarea } from './ExpandableTextarea';
+import { Card } from './ui/Card';
+import { Typography } from './ui/Typography';
 
 interface RevealViewProps {
     image: AppImage | null;
@@ -35,65 +36,67 @@ export const RevealView: React.FC<RevealViewProps> = ({
     getButtonLabel
 }) => {
     return (
-        <div className="flex flex-col gap-6 animate-enter">
+        <div className="flex flex-col gap-5 animate-enter">
             {requiresPassword && (
                 <div className="animate-slide-up">
-                    <Input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Enter Password to Unlock"
-                        startIcon={<IconLock className="w-5 h-5" />}
-                    />
+                    <Card variant="glass" className="p-1">
+                        <Input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Enter Password to Unlock"
+                            startIcon={<IconLock className="w-5 h-5" />}
+                            className="bg-transparent border-0 rounded-none focus:bg-transparent focus:shadow-none"
+                        />
+                    </Card>
+                </div>
+            )}
+
+            {decodedMessage ? (
+                <div className="animate-slide-up">
+                    <Card variant="glass" className="h-64 flex flex-col p-6 border-primary/20 bg-primary/5">
+                        <div className="flex justify-between items-center mb-4 border-b border-white/5 pb-4">
+                             <Typography variant="label" className="text-primary">Decoded Secret</Typography>
+                             <div className="text-[10px] bg-primary/20 text-primary px-2 py-1 rounded-full font-bold uppercase tracking-wider">
+                                 Success
+                             </div>
+                        </div>
+                        <div className="flex-1 w-full overflow-y-auto pr-2 custom-scrollbar text-white/90 font-mono text-sm leading-relaxed break-words whitespace-pre-wrap selection:bg-primary selection:text-white">
+                            {decodedMessage}
+                        </div>
+                    </Card>
+                </div>
+            ) : (
+                <div className="relative overflow-hidden rounded-2xl shadow-2xl">
+                    <Button
+                        variant="primary"
+                        onClick={() => image && onDecode(image)}
+                        disabled={isProcessing || !hasSignature}
+                        isLoading={isProcessing}
+                        loadingText={getButtonLabel()}
+                        icon={!isProcessing && <IconZap className="w-5 h-5" />}
+                        className="w-full h-16 text-lg tracking-wide"
+                    >
+                        {!isProcessing && "Reveal Hidden Text"}
+                    </Button>
+
+                     {/* Progress Bar Overlays */}
+                     {isProcessing && stage === 'processing' && (
+                        <div className="absolute inset-0 bg-white/20 z-20 pointer-events-none transition-all duration-100 ease-linear mix-blend-overlay" style={{ width: `${progress}%` }}></div>
+                    )}
                 </div>
             )}
 
             {decodedMessage && (
-                <div className="animate-slide-up">
-                    {/* Fixed Height Container, no glow */}
-                    <div className="bg-white/5 border border-white/10 rounded-2xl p-5 h-48 flex flex-col shadow-inner">
-                         {/*
-                             Using a raw pre tag for reliable scrolling of content.
-                             ExpandableTextarea was causing issues with nesting/scrolling.
-                             User wants fixed size and scrollable.
-                         */}
-                         <div className="flex-1 w-full h-full overflow-y-auto pr-2 custom-scrollbar text-primary font-mono text-sm leading-relaxed break-words whitespace-pre-wrap">
-                            {decodedMessage}
-                         </div>
-                    </div>
+                <div className="w-full text-center mt-4 animate-slide-up delay-100">
+                    <button
+                        onClick={onReConceal}
+                        className="group text-sm text-gray-500 hover:text-white transition-all py-3 px-6 rounded-full hover:bg-white/5 border border-transparent hover:border-white/10"
+                    >
+                        Want to overwrite this? <span className="text-primary font-bold group-hover:text-primary-hover ml-1">Re-Conceal</span>
+                    </button>
                 </div>
             )}
-
-            <div className="relative overflow-hidden rounded-2xl">
-                <Button
-                    variant="primary"
-                    onClick={() => image && onDecode(image)}
-                    disabled={isProcessing || !hasSignature}
-                    isLoading={isProcessing}
-                    loadingText={getButtonLabel()}
-                    icon={!isProcessing && <IconZap className="w-5 h-5" />}
-                    className="w-full text-base py-5 shadow-xl"
-                >
-                    {!isProcessing && "Reveal Text"}
-                </Button>
-
-                 {/* Progress Bar Overlays */}
-                 {isProcessing && stage === 'processing' && (
-                    <div className="absolute inset-0 bg-white/20 z-20 pointer-events-none transition-all duration-100 ease-linear mix-blend-overlay" style={{ width: `${progress}%` }}></div>
-                )}
-                {isProcessing && stage !== 'processing' && (
-                     <div className="absolute inset-0 bg-white/10 z-20 pointer-events-none animate-pulse mix-blend-overlay"></div>
-                )}
-            </div>
-
-            <div className="w-full text-center mt-2 animate-slide-up delay-100">
-                <button
-                    onClick={onReConceal}
-                    className="text-sm text-gray-500 hover:text-primary transition-colors py-2 px-4 rounded-lg hover:bg-white/5"
-                >
-                    Want to use this image again? <strong className="text-gray-300 group-hover:text-primary">Re-Conceal</strong>
-                </button>
-            </div>
         </div>
     );
 };

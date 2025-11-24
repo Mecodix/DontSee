@@ -3,6 +3,8 @@ import { IconX, IconLock, IconUnlock } from './Icons';
 import { ImageToDataIcon } from './ImageToDataIcon';
 import { AppImage } from '../types';
 import { cn } from '../utils/cn';
+import { Typography } from './ui/Typography';
+import { Button } from './ui/Button';
 
 interface ImagePreviewProps {
     image: AppImage | null;
@@ -55,67 +57,75 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
         }
     };
 
+    // The "Bento Hero" Block
     return (
         <div 
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             className={cn(
-                "relative rounded-[24px] overflow-hidden transition-all duration-300 w-full group select-none",
+                "relative rounded-3xl overflow-hidden transition-all duration-300 w-full group select-none",
+                // If no image, it's a big clickable dropzone
                 image
                     ? 'bg-transparent'
                     : cn(
-                        "min-h-[300px] border-2 border-dashed border-white/10 hover:border-primary/50",
-                        // Glassmorphism effect as requested:
-                        "bg-white/[0.02] backdrop-blur-[10px]",
-                        isDragging && "border-primary bg-primary/5 scale-[1.02] shadow-[0_0_40px_rgba(168,85,247,0.2)]"
+                        "min-h-[360px] border-2 border-dashed border-white/10 hover:border-primary/50",
+                        // Glass & Texture
+                        "bg-white/[0.02] backdrop-blur-md",
+                        isDragging && "border-primary bg-primary/10 scale-[1.01] shadow-[0_0_50px_rgba(139,92,246,0.3)] ring-4 ring-primary/20 ring-offset-4 ring-offset-background"
                     )
             )}>
             
+            {/* Loading Overlay */}
             {isLoading && !image && (
-                 <div className="absolute inset-0 z-20 bg-surface/95 backdrop-blur-xl flex flex-col items-center justify-center">
-                     <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
-                     <span className="text-white font-bold animate-pulse">Processing Image...</span>
+                 <div className="absolute inset-0 z-20 bg-background/80 backdrop-blur-xl flex flex-col items-center justify-center animate-in fade-in">
+                     <div className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin-slow mb-6"></div>
+                     <Typography variant="h3" className="animate-pulse">Processing Image...</Typography>
                  </div>
             )}
 
             {image ? (
-                <div className="w-full relative flex justify-center rounded-[24px] overflow-hidden shadow-2xl border border-white/5 bg-surface-raised/30 backdrop-blur-sm">
+                <div className="w-full relative flex justify-center rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-surface/50 backdrop-blur-xl">
                     {/* Image Container */}
                     <img src={image.src} className="w-full h-auto max-h-[500px] object-contain animate-enter" alt="Preview" />
                     
-                    {/* Action Overlay */}
-                    <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    {/* Floating Action Button (Delete) */}
+                    <div className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-y-2 group-hover:translate-y-0">
                          <button onClick={onReset}
                             disabled={isLoading}
                             aria-label="Remove image"
-                            // Reverted hover:bg-primary back to hover:bg-red-500/80 as per request
-                            className="w-10 h-10 flex items-center justify-center bg-black/50 hover:bg-red-500/80 rounded-full text-white backdrop-blur-md border border-white/10 transition-all hover:scale-110 shadow-lg">
-                            <IconX className="w-5 h-5" />
+                            className="w-12 h-12 flex items-center justify-center bg-black/60 hover:bg-error rounded-full text-white backdrop-blur-xl border border-white/10 transition-all hover:scale-110 shadow-lg active:scale-95">
+                            <IconX className="w-6 h-6" />
                         </button>
                     </div>
 
                     
+                    {/* Bento Badge */}
                     {hasSignature && (
                         <div
                             role="status"
                             aria-live="polite"
                             className={cn(
-                                "absolute bottom-4 left-4 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 animate-slide-up shadow-xl z-10 border backdrop-blur-md",
+                                "absolute bottom-6 left-6 pl-3 pr-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 animate-slide-up shadow-xl z-10 border backdrop-blur-2xl ring-1 ring-white/10",
                                 requiresPassword
-                                    ? 'bg-pink-600/90 text-white border-white/20 shadow-pink-600/20'
-                                    : 'bg-violet-600/90 text-white border-white/20 shadow-violet-600/20'
+                                    ? 'bg-pink-600/20 text-pink-200 border-pink-500/30'
+                                    : 'bg-primary/20 text-primary-foreground border-primary/30'
                             )}
                         >
+                            <div className={cn(
+                                "w-2 h-2 rounded-full animate-pulse",
+                                requiresPassword ? "bg-pink-500" : "bg-primary"
+                            )}></div>
                             {requiresPassword ? (
-                                <><IconLock className="w-3.5 h-3.5" /> Locked Text</>
+                                <><IconLock className="w-4 h-4" /> Locked</>
                             ) : (
-                                <><IconUnlock className="w-3.5 h-3.5" /> Open Text</>
+                                <><IconUnlock className="w-4 h-4" /> Open</>
                             )}
                         </div>
                     )}
                 </div>
             ) : (
+                // Empty State Dropzone
                 <div
                     role="button"
                     tabIndex={0}
@@ -125,20 +135,27 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, hasSignature,
                     aria-label="Upload an image"
                 >
                     <div className={cn(
-                        "mb-6 transition-transform duration-300",
-                        isDragging ? 'scale-110' : 'group-hover:rotate-0'
+                        "mb-8 p-6 rounded-full bg-white/5 border border-white/10 transition-all duration-500 group-hover:scale-110 group-hover:bg-white/10 group-hover:border-primary/30 group-hover:shadow-[0_0_30px_-10px_rgba(139,92,246,0.5)]",
+                        isDragging && "scale-125 bg-primary/20 border-primary shadow-[0_0_50px_-10px_rgba(139,92,246,0.8)]"
                     )}>
-                        <ImageToDataIcon />
+                        <ImageToDataIcon className="w-12 h-12 text-white/80 group-hover:text-white" />
                     </div>
-                    <span className="text-white font-bold text-xl tracking-tight">
+
+                    <Typography variant="h3" className="mb-2 group-hover:text-primary transition-colors">
                         {isDragging ? 'Drop it like it\'s hot!' : 'Upload Image'}
-                    </span>
-                    <span className="text-gray-500 text-sm mt-2 font-medium">
+                    </Typography>
+
+                    <Typography variant="body" className="text-white/40 mb-6">
                         Drag & Drop or Click to Browse
-                    </span>
-                    <span className="mt-4 px-3 py-1 bg-white/5 rounded-full text-xs text-gray-500 border border-white/5">
-                        PNG, JPG, WebP
-                    </span>
+                    </Typography>
+
+                    <div className="flex gap-2">
+                         {['PNG', 'JPG', 'WebP'].map(ext => (
+                             <span key={ext} className="px-3 py-1 rounded-md bg-white/5 border border-white/5 text-[10px] font-mono text-white/30 tracking-wider">
+                                 {ext}
+                             </span>
+                         ))}
+                    </div>
                     
                     <input
                         ref={fileInputRef}

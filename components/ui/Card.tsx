@@ -2,22 +2,30 @@ import React from 'react';
 import { cn } from '../../utils/cn';
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-    variant?: 'default' | 'raised' | 'glass';
+    variant?: 'default' | 'raised' | 'glass' | 'neo';
 }
 
 export const Card = React.forwardRef<HTMLDivElement, CardProps>(
     ({ className, variant = 'default', children, ...props }, ref) => {
         const variants = {
-            default: "bg-surface-container/50 border border-white/5",
-            raised: "bg-surface-raised/50 border border-white/10 shadow-xl",
-            glass: "bg-white/[0.03] backdrop-blur-xl border border-white/10 shadow-2xl"
+            // Standard Bento Block
+            default: "bg-surface/60 border border-white/5 backdrop-blur-md",
+
+            // Raised/Hoverable Block
+            raised: "bg-surface-raised/40 border border-white/10 hover:border-white/20 hover:bg-surface-raised/60 transition-colors",
+
+            // High Glass
+            glass: "glass shadow-2xl",
+
+            // Neo: Darker, cleaner
+            neo: "bg-[#0f0f0f] border border-white/5"
         };
 
         return (
             <div
                 ref={ref}
                 className={cn(
-                    "rounded-[24px] overflow-hidden transition-all duration-300",
+                    "rounded-3xl overflow-hidden", // The "No-Box" Rule: Extreme Rounding
                     variants[variant],
                     className
                 )}

@@ -5,6 +5,7 @@ import { ExpandableTextarea } from './ExpandableTextarea';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { Typography } from './ui/Typography';
+import { Card } from './ui/Card';
 import { cn } from '../utils/cn';
 
 interface ConcealViewProps {
@@ -57,102 +58,104 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
 
     const footerContent = (
         <div className="flex items-center gap-3 w-full">
-            <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
+            <div className="flex-1 h-1.5 bg-surface/50 rounded-full overflow-hidden border border-white/5">
                 <div
                     className={cn(
                         "h-full transition-all duration-300 shadow-[0_0_10px_currentColor]",
-                        // Reverted to standard red error state
-                        isOverLimit ? 'bg-red-500 text-red-500' : 'bg-primary text-primary'
+                        isOverLimit ? 'bg-error text-error' : 'bg-primary text-primary'
                     )}
                     style={{ width: `${usagePercent}%` }}
                 ></div>
             </div>
-            <Typography variant="caption" className={isOverLimit ? 'text-red-400 font-bold' : 'text-gray-500'}>
-                {currentBytes} / {maxBytes} bytes
+            <Typography variant="mono" className={cn(
+                "text-[10px]",
+                isOverLimit ? 'text-error' : 'text-gray-500'
+            )}>
+                {currentBytes}/{maxBytes} B
             </Typography>
         </div>
     );
 
     return (
-        <div className="flex flex-col gap-6 animate-enter">
-            <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4 animate-enter">
+            {/* Bento Block 1: Input Area */}
+            <Card variant="default" className="p-1">
                 <ExpandableTextarea
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     placeholder="Enter your secret text here..."
                     className={cn(
-                        "flex-1 min-h-[140px] bg-white/5 border text-white rounded-2xl p-4 focus:outline-none focus:ring-1 transition-all duration-300 placeholder:text-gray-600 resize-none",
-                        isOverLimit
-                            ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/50'
-                            : 'border-white/10 focus:border-primary/50 focus:bg-white/[0.07]'
+                        "flex-1 min-h-[160px] bg-transparent border-0 text-white p-5 focus:outline-none focus:ring-0 placeholder:text-gray-600 resize-none font-medium leading-relaxed",
+                         // Remove internal borders, let the Card handle it
                     )}
-                    footer={footerContent}
+                    footer={
+                        <div className="px-5 pb-4 pt-2">
+                             {footerContent}
+                        </div>
+                    }
                 />
+            </Card>
 
-                <div className="px-1">
-                    {footerContent}
+             {maxBytes === 0 && (
+                <div className="bg-error/10 border border-error/20 rounded-xl p-4 flex items-center gap-3 animate-slide-up">
+                        <div className="w-2 h-2 rounded-full bg-error animate-pulse"></div>
+                        <Typography variant="caption" className="text-error font-bold">
+                        Image too small. Please use a larger image.
+                    </Typography>
                 </div>
+            )}
 
-                {maxBytes === 0 && (
-                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-center gap-3 animate-slide-up">
-                         <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-                         <Typography variant="caption" className="text-red-400 font-bold">
-                            Image too small to hide data. Please upload a larger image.
-                        </Typography>
-                    </div>
-                )}
+            {/* Bento Block 2: Security & Actions */}
+            <div className="grid grid-cols-1 md:grid-cols-[1.5fr_1fr] gap-4">
+                <Card variant="glass" className="p-1 flex items-center">
+                    <Input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Password (Optional)"
+                        startIcon={<IconLock className="w-5 h-5" />}
+                        className="bg-transparent border-0 rounded-none focus:bg-transparent focus:shadow-none h-full"
+                    />
+                </Card>
+
+                {/* Action Button */}
+                 <div className="relative h-14">
+                    {resultBlobUrl ? (
+                         <a
+                            href={resultBlobUrl}
+                            download={downloadName}
+                            className="w-full h-full flex items-center justify-center gap-2 bg-success text-white rounded-2xl font-bold shadow-[0_0_20px_-5px_rgba(34,197,94,0.4)] hover:shadow-[0_0_30px_-5px_rgba(34,197,94,0.6)] transition-all hover:-translate-y-1 active:scale-95 border border-white/20"
+                         >
+                            <IconDownload className="w-5 h-5 animate-bounce" />
+                            <span>Download</span>
+                         </a>
+                    ) : (
+                        <Button
+                            onClick={() => image && onEncode(image)}
+                            disabled={isProcessing || !message || isOverLimit}
+                            isLoading={isProcessing}
+                            loadingText={getButtonLabel()}
+                            icon={!isProcessing && <IconEyeOff className="w-5 h-5" />}
+                            className="w-full h-full text-base rounded-2xl shadow-xl"
+                        >
+                            {!isProcessing && "Conceal"}
+                        </Button>
+                    )}
+                 </div>
             </div>
 
-            <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Encryption Password (Optional)"
-                startIcon={<IconLock className="w-5 h-5" />}
-            />
-
-            {resultBlobUrl ? (
-                <div className="animate-slide-up bg-surface-raised/50 border border-white/10 backdrop-blur-md p-5 rounded-3xl flex items-center justify-between shadow-xl">
-                    <div className="flex flex-col justify-center max-w-[70%]">
-                        <Typography variant="label" className="text-white mb-1 truncate" title={downloadName}>
+            {/* Result Status - Only appears on success */}
+             {resultBlobUrl && (
+                <div className="animate-slide-up bg-surface/40 border border-white/5 p-4 rounded-2xl flex items-center justify-between">
+                     <div className="flex flex-col overflow-hidden">
+                        <Typography variant="label" className="text-gray-300 truncate w-48">
                             {downloadName}
                         </Typography>
-                        <div className="flex items-center gap-2">
-                             <div className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold uppercase tracking-wider">
-                                Encoded
-                             </div>
-                             <Typography variant="caption">{formatBytes(resultSize)}</Typography>
-                        </div>
-                    </div>
-                    <a
-                        href={resultBlobUrl}
-                        download={downloadName}
-                        className="w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-lg shadow-primary/20 hover:shadow-primary/40 group border border-white/10"
-                        aria-label="Download encoded image"
-                    >
-                        <IconDownload className="w-6 h-6 group-hover:animate-bounce" />
-                    </a>
-                </div>
-            ) : (
-                <div className="relative overflow-hidden rounded-2xl group">
-                     <Button
-                        onClick={() => image && onEncode(image)}
-                        disabled={isProcessing || !message || isOverLimit}
-                        isLoading={isProcessing}
-                        loadingText={getButtonLabel()}
-                        icon={!isProcessing && <IconEyeOff className="w-5 h-5" />}
-                        className="w-full text-base py-5 shadow-xl"
-                    >
-                        {!isProcessing && "Conceal Text"}
-                    </Button>
-
-                    {/* Progress Bar Overlays */}
-                    {isProcessing && stage === 'processing' && (
-                        <div className="absolute inset-0 bg-white/20 z-20 pointer-events-none transition-all duration-100 ease-linear mix-blend-overlay" style={{ width: `${progress}%` }}></div>
-                    )}
-                    {isProcessing && stage !== 'processing' && (
-                         <div className="absolute inset-0 bg-white/10 z-20 pointer-events-none animate-pulse mix-blend-overlay"></div>
-                    )}
+                        <Typography variant="caption" className="text-success">
+                            {formatBytes(resultSize)} • Ready to Save
+                        </Typography>
+                     </div>
+                     <div className="w-2 h-2 rounded-full bg-success shadow-[0_0_10px_#22c55e]"></div>
                 </div>
             )}
         </div>

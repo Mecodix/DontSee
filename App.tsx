@@ -13,6 +13,7 @@ import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 import { AppShell } from './components/layout/AppShell';
 import { Typography } from './components/ui/Typography';
 import { cn } from './utils/cn';
+import { Card } from './components/ui/Card';
 
 // Helper to format bytes
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -214,13 +215,14 @@ const App: React.FC = () => {
         requiresPassword
     );
 
+    // "No-Midtone" & "Glassmorphism" for Drag Overlay
     const dragOverlayContent = isDragging ? (
-        <div className="fixed inset-0 z-[999] bg-surface/90 backdrop-blur-xl flex flex-col items-center justify-center m-4 rounded-[32px] animate-pulse">
-            <div className="bg-primary/20 p-8 rounded-full mb-6 ring-4 ring-primary/10">
+        <div className="fixed inset-0 z-[999] bg-background/80 backdrop-blur-2xl flex flex-col items-center justify-center animate-in fade-in duration-300">
+            <div className="bg-primary/20 p-8 rounded-full mb-6 ring-1 ring-primary/50 shadow-[0_0_100px_-20px_rgba(139,92,246,0.5)] animate-bounce">
                 <IconFilePlus className="w-16 h-16 text-primary" />
             </div>
-            <Typography variant="h1" className="text-4xl text-transparent bg-clip-text bg-gradient-to-br from-white to-white/50">Drop Image Here</Typography>
-            <Typography variant="body" className="text-gray-400 mt-4 text-lg">Release to upload instantly</Typography>
+            <Typography variant="h1" className="text-5xl text-glow">Drop Image Here</Typography>
+            <Typography variant="body" className="text-gray-400 mt-4 text-xl">Release to unleash secrets</Typography>
         </div>
     ) : null;
 
@@ -230,20 +232,21 @@ const App: React.FC = () => {
             dragOverlay={dragOverlayContent}
         >
             {/* Status Header - Dynamic based on state */}
-            <div className="flex flex-col items-center text-center gap-2 mb-2 animate-slide-up" key={headerTitle}>
+            <div className="flex flex-col items-center text-center gap-2 mb-6 animate-slide-up" key={headerTitle}>
                 <Typography variant="h2" className={cn(
                     "transition-colors duration-300",
-                    image ? "text-white" : "text-white/80"
+                    image ? "text-white" : "text-white/60" // Subtle fade
                 )}>
                     {headerTitle}
                 </Typography>
-                <Typography variant="body" className="text-gray-500 max-w-sm mx-auto">
+                <Typography variant="body" className="text-gray-500 max-w-sm mx-auto font-medium">
                     {headerDesc}
                 </Typography>
             </div>
 
-            <div className="flex-1 flex flex-col gap-8 relative w-full">
+            <div className="flex-1 flex flex-col gap-6 relative w-full">
                 
+                {/* Image Preview Block - "Hero" of the Bento Grid */}
                 <ImagePreview
                     image={image}
                     hasSignature={hasSignature}
@@ -256,20 +259,23 @@ const App: React.FC = () => {
 
                 {/* Content Area - Slides up when image is present */}
                 {(image || isScanning || isReading) && (
-                    <div className="flex-1 flex flex-col gap-5 animate-enter">
+                    <div className="flex-1 flex flex-col gap-6 animate-enter duration-700 delay-100">
 
                         {(isScanning || isReading) ? (
-                            <div className="flex-1 flex flex-col items-center justify-center h-full min-h-[200px] gap-4 bg-surface-raised/30 rounded-[24px] border border-white/5 backdrop-blur-sm">
-                                <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
-                                <div className="flex flex-col items-center">
-                                    <Typography variant="label" className="text-primary mb-1">
-                                        {isReading ? "Reading Bits" : "Analyzing Noise"}
+                            <Card variant="glass" className="flex-1 flex flex-col items-center justify-center h-full min-h-[300px] gap-6 p-8">
+                                <div className="relative">
+                                    <div className="w-16 h-16 border-4 border-primary/20 rounded-full animate-spin-slow"></div>
+                                    <div className="absolute inset-0 border-t-4 border-primary rounded-full animate-spin"></div>
+                                </div>
+                                <div className="flex flex-col items-center gap-2">
+                                    <Typography variant="label" className="text-primary text-lg">
+                                        {isReading ? "Reading Bits..." : "Analyzing Noise..."}
                                     </Typography>
                                     <Typography variant="caption" className="text-gray-500">
-                                        Please wait...
+                                        Decrypting the matrix
                                     </Typography>
                                 </div>
-                            </div>
+                            </Card>
                         ) : (image && (
                             mode === AppMode.HIDE ? (
                                 <ConcealView
