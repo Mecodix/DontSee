@@ -68,7 +68,7 @@ export const RevealView: React.FC<RevealViewProps> = ({
                 <Button
                     variant="primary"
                     onClick={() => image && onDecode(image)}
-                    disabled={isProcessing || !hasSignature}
+                    disabled={isProcessing || !password}
                     isLoading={isProcessing}
                     loadingText={getButtonLabel()}
                     icon={!isProcessing && <IconZap className="w-5 h-5" />}
@@ -86,14 +86,6 @@ export const RevealView: React.FC<RevealViewProps> = ({
                 )}
             </div>
 
-            <div className="w-full text-center mt-2 animate-slide-up delay-100">
-                <button
-                    onClick={onReConceal}
-                    className="text-sm text-gray-500 hover:text-primary transition-colors py-2 px-4 rounded-lg hover:bg-white/5"
-                >
-                    Want to use this image again? <strong className="text-gray-300 group-hover:text-primary">Re-Conceal</strong>
-                </button>
-            </div>
         </div>
     );
 };
