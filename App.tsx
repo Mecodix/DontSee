@@ -27,52 +27,51 @@ const formatBytes = (bytes: number, decimals = 2) => {
 // Helper: Get Header Content
 const getHeaderContent = (
     isReading: boolean,
-    isScanning: boolean,
     image: AppImage | null,
     mode: AppMode,
-    requiresPassword: boolean
+    isProcessing: boolean
 ) => {
+    if (isProcessing) {
+        return {
+             title: "Processing...",
+             desc: "Performing cryptographic operations"
+        };
+    }
     if (isReading) {
         return {
             title: "Reading Image",
-            desc: "Decoding pixel data..."
-        };
-    }
-    if (isScanning) {
-        return {
-            title: "Analyzing Image",
-            desc: "Scanning for hidden content..."
+            desc: "Loading pixels into memory..."
         };
     }
     if (!image) {
         return {
-            title: "Steganography",
-            desc: "Securely hide text within images, or reveal hidden secrets."
+            title: "True Steganography",
+            desc: "Hide data invisibly. No signatures. No traces."
         };
     }
+    // With True Stego, we don't know if there is a message.
+    // So the header should reflect "Ready" state.
+    // However, if the user explicitly switches modes, we can update the title.
     if (mode === AppMode.HIDE) {
         return {
             title: "Secure Your Text",
-            desc: "Embed secret text into this image."
+            desc: "Embed secret text. Password is required."
         };
-    }
-    // Reveal Mode
-    if (requiresPassword) {
+    } else {
         return {
-            title: "Locked Content",
-            desc: "Enter password to decrypt the hidden text."
+            title: "Reveal Secret",
+            desc: "Enter password to search for hidden data."
         };
     }
-    return {
-        title: "Secret Found",
-        desc: "Hidden text detected successfully."
-    };
 };
 
 const App: React.FC = () => {
+    // Default mode is HIDE. User must manually toggle to REVEAL (or we can add a toggle UI)
+    // Actually, ConcealView vs RevealView is a bit rigid for True Stego.
+    // But for now, let's keep the two views but maybe add a tab switcher?
+    // Or just default to HIDE and have a "Switch to Decrypt" button.
     const [mode, setMode] = useState<AppMode>(AppMode.HIDE);
-    // Local scanning state to prevent flickering on upload
-    const [isScanning, setIsScanning] = useState(false);
+
     // New state for browser decoding phase
     const [isReading, setIsReading] = useState(false);
 
@@ -88,10 +87,9 @@ const App: React.FC = () => {
         notification,
         resultBlobUrl,
         resultSize,
-        hasSignature,
-        requiresPassword,
+        // hasSignature and requiresPassword are effectively unused/false in True Stego
         maxBytes,
-        setMaxBytes, // Exposed for manual override
+        setMaxBytes,
         processEncode,
         processDecode,
         handleImageScan,
@@ -103,38 +101,22 @@ const App: React.FC = () => {
         resetImage();
         resetStegoState();
         setMode(AppMode.HIDE); // Reset to default mode
-        setIsScanning(false);
         setIsReading(false);
     };
 
-    // Handle Auto-Switch Logic based on Scan
+    // Handle Image Load
     const onImageLoaded = async (img: HTMLImageElement) => {
-        setIsReading(false); // Image is fully loaded in DOM
-        setIsScanning(true); // Start analyzing signature
-        try {
-            await handleImageScan(img, mode);
-        } finally {
-             setIsScanning(false);
-        }
+        setIsReading(false);
+        // We still call handleImageScan just to calculate capacity
+        await handleImageScan(img, mode);
+        // We do NOT switch modes automatically anymore.
     };
-
-    // "Smart Drop" Logic: Auto-switch when signature state is determined
-    React.useEffect(() => {
-        if (image && hasSignature && !isScanning) {
-            setMode(AppMode.SEE);
-        } else if (image && !hasSignature && !isScanning) {
-            setMode(AppMode.HIDE);
-        }
-    }, [hasSignature, image, isScanning]);
-
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            // Immediate feedback: Set reading to true
             setIsReading(true);
             resetStegoState();
-
             processFile(
                 file,
                 (img) => onImageLoaded(img),
@@ -148,10 +130,8 @@ const App: React.FC = () => {
     };
 
     const handleFileDrop = (file: File) => {
-        // Immediate feedback: Set reading to true
         setIsReading(true);
         resetStegoState();
-
         processFile(
             file,
             (img) => onImageLoaded(img),
@@ -162,16 +142,12 @@ const App: React.FC = () => {
         );
     };
 
-    // Hook up Global Drag & Drop
     const { isDragging } = useGlobalDragDrop(handleFileDrop);
 
-    // Hook up Paste Handler
     usePasteHandler(
         (file) => {
-             // Immediate feedback: Set reading to true
             setIsReading(true);
             resetStegoState();
-
             processFile(
                 file,
                 (img) => onImageLoaded(img),
@@ -201,17 +177,17 @@ const App: React.FC = () => {
 
     const getButtonLabel = () => {
         if (!isProcessing) return null;
-        if (stage === 'analyzing') return 'Preparing...';
+        if (stage === 'analyzing') return 'Analyzing...'; // Re-purposed for key derivation
+        if (stage === 'processing') return 'Cryptograhpy...';
         if (stage === 'rendering') return 'Finalizing...';
         return `${progress}%`;
     };
 
     const { title: headerTitle, desc: headerDesc } = getHeaderContent(
         isReading,
-        isScanning,
         image,
         mode,
-        requiresPassword
+        isProcessing
     );
 
     const dragOverlayContent = isDragging ? (
@@ -229,7 +205,7 @@ const App: React.FC = () => {
             showToast={<Toast notification={notification} />}
             dragOverlay={dragOverlayContent}
         >
-            {/* Status Header - Dynamic based on state */}
+            {/* Status Header */}
             <div className="flex flex-col items-center text-center gap-2 mb-2 animate-slide-up" key={headerTitle}>
                 <Typography variant="h2" className={cn(
                     "transition-colors duration-300",
@@ -246,24 +222,52 @@ const App: React.FC = () => {
                 
                 <ImagePreview
                     image={image}
-                    hasSignature={hasSignature}
-                    requiresPassword={requiresPassword}
+                    hasSignature={false} // Always false in True Stego
+                    requiresPassword={false} // Always false (unknown)
                     onReset={reset}
                     onFileSelect={handleFileSelect}
                     onFileDrop={handleFileDrop}
-                    isLoading={isReading || isScanning}
+                    isLoading={isReading}
                 />
 
-                {/* Content Area - Slides up when image is present */}
-                {(image || isScanning || isReading) && (
+                {/* Mode Switcher - Only visible when image is loaded */}
+                {image && !isReading && (
+                    <div className="flex justify-center gap-4 animate-enter">
+                         <button
+                            onClick={() => setMode(AppMode.HIDE)}
+                            className={cn(
+                                "px-6 py-2 rounded-full text-sm font-bold transition-all duration-300",
+                                mode === AppMode.HIDE
+                                    ? "bg-primary/20 text-primary border border-primary/50"
+                                    : "text-gray-500 hover:text-white hover:bg-white/5"
+                            )}
+                         >
+                            Hide Data
+                         </button>
+                         <button
+                            onClick={() => setMode(AppMode.SEE)}
+                            className={cn(
+                                "px-6 py-2 rounded-full text-sm font-bold transition-all duration-300",
+                                mode === AppMode.SEE
+                                    ? "bg-primary/20 text-primary border border-primary/50"
+                                    : "text-gray-500 hover:text-white hover:bg-white/5"
+                            )}
+                         >
+                            Reveal Data
+                         </button>
+                    </div>
+                )}
+
+                {/* Content Area */}
+                {(image || isReading) && (
                     <div className="flex-1 flex flex-col gap-5 animate-enter">
 
-                        {(isScanning || isReading) ? (
+                        {isReading ? (
                             <div className="flex-1 flex flex-col items-center justify-center h-full min-h-[200px] gap-4 bg-surface-raised/30 rounded-[24px] border border-white/5 backdrop-blur-sm">
                                 <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
                                 <div className="flex flex-col items-center">
                                     <Typography variant="label" className="text-primary mb-1">
-                                        {isReading ? "Reading Bits" : "Analyzing Noise"}
+                                        Reading Bits
                                     </Typography>
                                     <Typography variant="caption" className="text-gray-500">
                                         Please wait...
@@ -295,8 +299,8 @@ const App: React.FC = () => {
                                     password={password}
                                     setPassword={setPassword}
                                     decodedMessage={decodedMessage}
-                                    requiresPassword={requiresPassword}
-                                    hasSignature={hasSignature}
+                                    requiresPassword={true} // Always force password input in Reveal mode
+                                    hasSignature={false}
                                     isProcessing={isProcessing}
                                     stage={stage}
                                     progress={progress}

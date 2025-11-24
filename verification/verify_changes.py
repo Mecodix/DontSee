@@ -5,24 +5,17 @@ def verify_changes():
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
-        # Navigate to the app (Vite default is usually 5173 but log says 3000)
+        # Navigate to the app (Vite default is usually 5173 but previous log said 3000)
         page.goto("http://localhost:3000")
 
         # Wait for the app to load
         page.wait_for_selector("main")
 
-        # Hover over the upload card to trigger animation (approximate location or selector)
-        # The card is in ImagePreview, let's find the container.
-        # It has "Upload Image" text.
+        # Verify initial state: "True Steganography" header
+        page.wait_for_selector("text=True Steganography")
 
-        upload_area = page.get_by_text("Upload Image").locator("xpath=..")
-        upload_area.hover()
-
-        # Wait a moment for hover effect
-        page.wait_for_timeout(500)
-
-        # Take a screenshot of the whole page to verify alignment and styles
-        page.screenshot(path="verification/full_page.png")
+        # Take a screenshot of the initial state
+        page.screenshot(path="verification/true_stego_initial.png")
 
         browser.close()
 

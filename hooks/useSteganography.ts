@@ -22,12 +22,15 @@ export const useSteganography = () => {
     const [notification, setNotification] = useState<NotificationState | null>(null);
     const [resultBlobUrl, setResultBlobUrl] = useState<string | null>(null);
     const [resultSize, setResultSize] = useState(0);
+
+    // In True Stego, we never know if there is a signature or if it requires a password
+    // until we try to decode it.
+    // We keep these states internally consistent (always false) to satisfy Typescript
+    // and downstream logic until we fully refactor the UI.
     const [hasSignature, setHasSignature] = useState(false);
     const [requiresPassword, setRequiresPassword] = useState(false);
-    const [maxBytes, setMaxBytes] = useState(0);
 
-    // Expose scanning state to help App avoid flickering
-    const [isScanning, setIsScanning] = useState(false);
+    const [maxBytes, setMaxBytes] = useState(0);
 
     const notify = (type: 'success' | 'error', msg: string) => {
         setNotification({ type, msg });
@@ -72,9 +75,8 @@ export const useSteganography = () => {
     };
 
     const handleImageScan = async (img: HTMLImageElement, mode: AppMode) => {
-        // Start a new scan ID
-        const scanId = ++currentScanId.current;
-        setIsScanning(true);
+        // In True Stego, "Scanning" is purely for capacity calculation.
+        // There is NO detection of existing messages.
 
         try {
             const capacity = calculateMaxBytes(img.width, img.height);
@@ -84,51 +86,17 @@ export const useSteganography = () => {
             setMaxBytes(0);
         }
 
-        // Artificial minimum delay to ensure user sees the "Analyzing..." state
-        // This addresses user feedback about the state flickering too fast.
-        const minDelay = new Promise(resolve => setTimeout(resolve, 400));
-
-        try {
-            const scanPromise = (async () => {
-                 // Scan only the first row of pixels (sufficient for signature)
-                const scanWidth = Math.min(img.width, 50);
-                const scanHeight = 1;
-
-                const canvas = document.createElement('canvas');
-                canvas.width = scanWidth;
-                canvas.height = scanHeight;
-
-                const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                if (ctx) {
-                    ctx.drawImage(img, 0, 0, scanWidth, scanHeight, 0, 0, scanWidth, scanHeight);
-                    const imageData = ctx.getImageData(0, 0, scanWidth, scanHeight);
-                    const bufferCopy = imageData.data.buffer.slice(0);
-                    return await steganographyService.scanImage(bufferCopy);
-                }
-                return null;
-            })();
-
-            const [sigType] = await Promise.all([scanPromise, minDelay]);
-
-            // Only update state if this is still the most recent scan
-            if (scanId === currentScanId.current) {
-                if (sigType) {
-                    setHasSignature(true);
-                    setRequiresPassword(sigType === 'locked');
-                }
-            }
-        } catch (error) {
-            console.error("Scan error", error);
-            notify('error', 'Failed to scan image for signatures.');
-        } finally {
-            if (scanId === currentScanId.current) {
-                setIsScanning(false);
-            }
-        }
+        // We do NOT call steganographyService.scanImage anymore because
+        // it is impossible to detect a message without the password.
+        setHasSignature(false);
+        setRequiresPassword(false);
     };
 
     const processEncode = async (image: AppImage) => {
         if (!message) return notify('error', 'Please provide a message.');
+        // Password is now MANDATORY for True Stego to generate the scatter seed.
+        if (!password) return notify('error', 'Password is required for secure encoding.');
+
         const currentBytes = getByteLength(message);
         if (currentBytes > maxBytes) return notify('error', `Message is too long! Limit is ${maxBytes} bytes`);
 
@@ -180,6 +148,8 @@ export const useSteganography = () => {
     };
 
     const processDecode = async (image: AppImage) => {
+        if (!password) return notify('error', 'Password is required to decrypt.');
+
         const opId = ++currentOperationId.current;
         setIsProcessing(true);
         setProgress(0);
@@ -211,7 +181,9 @@ export const useSteganography = () => {
             if (opId !== currentOperationId.current) return;
             setDecodedMessage('');
             const errorMessage = err instanceof Error ? err.message : 'Decoding failed';
-            notify('error', errorMessage === 'Decryption failed' ? 'Wrong Password' : errorMessage);
+            // In True Stego, we don't know if it was "Wrong Password" or "No Message".
+            // The worker returns a generic error or "No hidden message found with this password."
+            notify('error', errorMessage);
         } finally {
             if (opId === currentOperationId.current) {
                 setIsProcessing(false);

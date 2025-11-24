@@ -1,22 +1,8 @@
 import { argon2id } from 'hash-wasm';
 import {
-    SIG_BITS,
-    SALT_BITS,
     IV_BITS,
-    LENGTH_BITS,
-    SEQUENTIAL_BITS
+    LENGTH_BITS
 } from '../utils/constants';
-
-// Constants
-const SIG_UNLOCKED = "0100010001010011"; // "DS"
-const SIG_UNLOCKED_RAW = "0100010001010101"; // "DU"
-
-// Secure Scattering Signatures (V2)
-const SIG_LOCKED_SECURE = "0100010001010000"; // "DP"
-const SIG_LOCKED_RAW_SECURE = "0100010001010001"; // "DQ"
-
-// Internal Constant for "Empty Password"
-const EMPTY_PASSWORD_SENTINEL = "___DONTSEE_EMPTY_PASSWORD_SENTINEL_V1___";
 
 // Types
 type PixelArray = Uint8ClampedArray;
@@ -55,38 +41,103 @@ function getPhysicalIndex(logicalIndex: number): number {
     return (q * 4) + r;
 }
 
-// Count valid bytes up to a physical index
-function countValidBytes(physicalIndex: number): number {
-    return (3 * Math.floor(physicalIndex / 4)) + (physicalIndex % 4);
+// Helper: Check local variance (Adaptive Steganography)
+// Returns true if the pixel is "noisy enough" to modify, false if it's too smooth.
+function isPixelNoisy(pixels: PixelArray, physicalIndex: number, width: number, threshold: number = 5): boolean {
+    // Simple neighbor check: Compare with right neighbor (if exists)
+    // A robust implementation would check N/S/E/W, but for performance in a tight loop we check minimal neighbors.
+    // physicalIndex is R, G, or B component.
+
+    // Safety check for bounds
+    if (physicalIndex + 4 >= pixels.length) return true; // Edge case: always allow
+
+    const currentVal = pixels[physicalIndex];
+    const rightVal = pixels[physicalIndex + 4]; // Next pixel's same component
+
+    // If difference is greater than threshold, it's an edge/texture.
+    return Math.abs(currentVal - rightVal) > threshold;
 }
 
-// Shared LCG / Scatter Logic
-function initLCG(seed: number, bodyValidCount: number) {
+// Shared LCG / Scatter Logic with Adaptive Skip
+// Returns an iterator that yields physical indices
+function createScatterIterator(seed: number, bodyValidCount: number, pixels: PixelArray, width: number) {
     const random = mulberry32(seed);
 
-    const start = Math.floor(random() * bodyValidCount);
+    let start = Math.floor(random() * bodyValidCount);
     let step = Math.floor(random() * bodyValidCount);
     if (step === 0) step = 1;
     while (gcd(step, bodyValidCount) !== 1) {
         step = Math.floor(random() * bodyValidCount);
         if (step === 0) step = 1;
     }
-    return { start, step };
+
+    let i = 0;
+
+    return {
+        next: () => {
+             // Adaptive Loop: Keep skipping until we find a suitable pixel or hit a safety limit
+            let attempts = 0;
+            let targetIdx = 0;
+
+            do {
+                const logicalBodyIndex = (start + i * step) % bodyValidCount;
+                targetIdx = getPhysicalIndex(logicalBodyIndex);
+
+                i++; // Always advance the sequence
+                attempts++;
+
+                // Safety valve: If we search 100 times and find only smooth pixels, just use the last one.
+                // This prevents infinite loops in perfectly flat images (like a solid color block).
+                if (attempts > 50) break;
+
+            } while (!isPixelNoisy(pixels, targetIdx, width));
+
+            return targetIdx;
+        }
+    };
 }
 
-// Derive Scattering Seed from Salt + Password (SHA-256)
-async function deriveScatteringSeed(salt: Uint8Array, password: string): Promise<number> {
+// Derive Key AND Salt from Password
+// Double-Derive: SHA-256(Password) -> KeyMaterial.
+// Split KeyMaterial -> UserKey (for encryption) + Salt (for scattering)
+async function deriveSecrets(password: string) {
     const enc = new TextEncoder();
-    const passwordBytes = enc.encode(password);
+    const keyMaterial = await crypto.subtle.digest('SHA-256', enc.encode(password));
+    const keyBytes = new Uint8Array(keyMaterial);
 
-    const buffer = new Uint8Array(salt.length + passwordBytes.length);
-    buffer.set(salt, 0);
-    buffer.set(passwordBytes, salt.length);
+    // Use first 16 bytes as Salt, next 16 bytes as "Pre-Key" for Argon2
+    const salt = keyBytes.slice(0, 16);
+    const preKey = keyBytes.slice(16, 32);
 
-    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-    const hashView = new DataView(hashBuffer);
-    return hashView.getUint32(0, true);
+    // We still use Argon2id for the actual encryption key to make brute-force hard
+    // But now the Salt is deterministic based on the password.
+
+    const rawKey = await argon2id({
+        password: password, // Use original password
+        salt: salt,         // Derived salt
+        parallelism: 1,
+        iterations: 16,
+        memorySize: 16384,
+        hashLength: 32,
+        outputType: 'binary'
+    });
+
+    const cryptoKey = await crypto.subtle.importKey(
+        "raw",
+        rawKey,
+        "AES-GCM",
+        false,
+        ["encrypt", "decrypt"]
+    );
+
+    // Derive Seed for LCG from the same salt
+    const seedView = new DataView(salt.buffer);
+    // XOR the four 32-bit words of the salt to get one 32-bit seed
+    const seed = seedView.getUint32(0) ^ seedView.getUint32(4) ^ seedView.getUint32(8) ^ seedView.getUint32(12);
+
+    return { key: cryptoKey, seed, salt };
 }
+
 
 // Compression Helpers
 async function compress(text: string): Promise<Uint8Array> {
@@ -99,29 +150,6 @@ async function decompress(data: Uint8Array): Promise<string> {
     return await new Response(stream).text();
 }
 
-// Crypto Helper (Argon2id)
-async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
-    const effectivePassword = (!password || password.length === 0) ? EMPTY_PASSWORD_SENTINEL : password;
-
-    const rawKey = await argon2id({
-        password: effectivePassword,
-        salt: salt,
-        parallelism: 1,
-        iterations: 16,
-        memorySize: 16384,
-        hashLength: 32,
-        outputType: 'binary'
-    });
-
-    return await crypto.subtle.importKey(
-        "raw",
-        rawKey,
-        "AES-GCM",
-        false,
-        ["encrypt", "decrypt"]
-    );
-}
-
 async function handleEncode(
     id: string,
     pixels: PixelArray,
@@ -132,122 +160,87 @@ async function handleEncode(
     message: string,
     password?: string
 ) {
-    const hasPassword = password && password.length > 0;
-    const canCompress = supportsCompression();
+    if (!password) throw new Error("Password is required for secure encoding.");
 
-    // Determine Signature
-    let signature;
-    if (hasPassword) {
-        signature = canCompress ? SIG_LOCKED_SECURE : SIG_LOCKED_RAW_SECURE;
-    } else {
-        signature = canCompress ? SIG_UNLOCKED : SIG_UNLOCKED_RAW;
-    }
+    // 1. Secrets Derivation
+    const { key, seed } = await deriveSecrets(password);
 
-    // Crypto Setup
-    const salt = crypto.getRandomValues(new Uint8Array(16)); // 128 bits
-    const iv = crypto.getRandomValues(new Uint8Array(12)); // 96 bits
-
-    // Derive Key
-    const key = await deriveKey(password || "", salt);
-
-    // Compress OR Raw
+    // 2. Prepare Payload
     let dataPayload: Uint8Array;
-    if (canCompress) {
+    if (supportsCompression()) {
         dataPayload = await compress(message);
     } else {
         dataPayload = new TextEncoder().encode(message);
     }
 
-    const encryptedBuffer = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, dataPayload);
-    const encryptedBytes = new Uint8Array(encryptedBuffer);
+    const iv = crypto.getRandomValues(new Uint8Array(12)); // 96 bits
 
+    // 3. AAD Binding (Dimensions + Total Bytes)
+    // This binds the encrypted data to this specific image container size
+    const aad = new TextEncoder().encode(`${width}x${height}:${pixels.length}`);
+
+    const encryptedBuffer = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: iv, additionalData: aad },
+        key,
+        dataPayload
+    );
+    const encryptedBytes = new Uint8Array(encryptedBuffer);
     const dataBitsLength = encryptedBytes.length * 8;
 
-    // --- Header Construction ---
-
-    // 1. Sequential Header (Signature + Salt)
-    let seqHeaderBits = "";
-    seqHeaderBits += signature;
-    for(let b of salt) seqHeaderBits += b.toString(2).padStart(8, '0');
-
-    // 2. Scattered Payload (IV + Length + EncryptedData)
-    // Note: IV and Length were previously sequential. Now they are scattered to hide them.
-    let scatteredPayloadBits = "";
-    for(let b of iv) scatteredPayloadBits += b.toString(2).padStart(8, '0');
-    scatteredPayloadBits += dataBitsLength.toString(2).padStart(32, '0'); // Length is 32 bits
-
-    const totalPayloadBits = scatteredPayloadBits.length + dataBitsLength;
+    // 4. Construct Bit Stream: [IV (96)] + [Length (32)] + [Encrypted Body]
+    // Total Bits needed
+    const totalPayloadBits = IV_BITS + LENGTH_BITS + dataBitsLength;
 
     // Capacity Check
     const totalPixels = pixels.length / 4;
     const totalAvailableBits = totalPixels * 3;
-
-    // Total required = Sequential (144) + Scattered (128 + body)
-    if ((seqHeaderBits.length + totalPayloadBits) > totalAvailableBits) {
-            throw new Error("Message too long for this image size");
+    if (totalPayloadBits > totalAvailableBits) {
+         throw new Error("Message too long for this image size");
     }
 
-    // --- Writing Phase ---
+    // 5. Writing Phase (Adaptive & Scattered)
+    const bodyValidCount = (pixels.length / 4) * 3;
+    const iterator = createScatterIterator(seed, bodyValidCount, pixels, width);
 
-    // 1. Write Sequential Header
-    let ptr = 0;
-    for (let i = 0; i < seqHeaderBits.length; i++) {
-        while ((ptr + 1) % 4 === 0) ptr++;
-        if (seqHeaderBits[i] === '1') pixels[ptr] |= 1;
-        else pixels[ptr] &= ~1;
-        ptr++;
-    }
-    const headerEndIndex = ptr; // Points to where sequential writing stopped
-
-    // 2. Initialize LCG
-    const headerValidCount = countValidBytes(headerEndIndex);
-    const totalValidCount = (pixels.length / 4) * 3;
-    const bodyValidCount = totalValidCount - headerValidCount;
-
-    // Seed Derivation
-    let seed: number;
-    if (hasPassword) {
-        seed = await deriveScatteringSeed(salt, password!);
-    } else {
-        const saltView = new DataView(salt.buffer);
-        seed = saltView.getUint32(0, true);
-    }
-
-    const { start, step } = initLCG(seed, bodyValidCount);
-
-    // 3. Write Scattered Payload
-    const needed = totalPayloadBits;
     let lastReportTime = performance.now();
 
-    for (let i = 0; i < needed; i++) {
-        // Progress reporting
+    // Helper to get bit at global stream index
+    const getBit = (i: number): number => {
+        if (i < IV_BITS) {
+            // IV
+            const byteIdx = Math.floor(i / 8);
+            const bitIdx = 7 - (i % 8);
+            return (iv[byteIdx] >>> bitIdx) & 1;
+        } else if (i < IV_BITS + LENGTH_BITS) {
+            // Length
+            const lenOffset = i - IV_BITS;
+             // Length is 32 bits. We write it MSB first.
+             // We can convert length to binary string and pick.
+             // Optimization: string conversion is easier to read/debug
+             return parseInt(dataBitsLength.toString(2).padStart(32, '0')[lenOffset]);
+        } else {
+            // Body
+            const bodyOffset = i - (IV_BITS + LENGTH_BITS);
+            const byteIdx = Math.floor(bodyOffset / 8);
+            const bitIdx = 7 - (bodyOffset % 8);
+            return (encryptedBytes[byteIdx] >>> bitIdx) & 1;
+        }
+    };
+
+    for (let i = 0; i < totalPayloadBits; i++) {
+        // Progress
         if (i % 1000 === 0) {
             const now = performance.now();
             if (now - lastReportTime > 33) {
-                const progress = Math.floor((i / needed) * 100);
+                const progress = Math.floor((i / totalPayloadBits) * 100);
                 postMessage({ id, success: true, progress });
                 await new Promise(r => setTimeout(r, 0));
                 lastReportTime = performance.now();
             }
         }
 
-        // LCG Index Logic
-        const logicalBodyIndex = (start + i * step) % bodyValidCount;
-        const absoluteLogicalIndex = headerValidCount + logicalBodyIndex;
-        const targetIdx = getPhysicalIndex(absoluteLogicalIndex);
-
-        // Bit Extraction
-        let bit = 0;
-        if (i < scatteredPayloadBits.length) {
-            // Metadata (IV + Length)
-            bit = parseInt(scatteredPayloadBits[i]);
-        } else {
-            // Encrypted Body
-            const bodyBitIndex = i - scatteredPayloadBits.length;
-            const byteIndex = Math.floor(bodyBitIndex / 8);
-            const bitSubIndex = 7 - (bodyBitIndex % 8);
-            bit = (encryptedBytes[byteIndex] >>> bitSubIndex) & 1;
-        }
+        const targetIdx = iterator.next();
+        const bit = getBit(i);
 
         if (bit === 1) pixels[targetIdx] |= 1;
         else pixels[targetIdx] &= ~1;
@@ -266,90 +259,46 @@ async function handleEncode(
     }
 }
 
-async function handleDecode(id: string, pixels: PixelArray, password?: string) {
-    let ptr = 0;
-    const readSequentialBits = (count: number) => {
+async function handleDecode(id: string, pixels: PixelArray, width: number, height: number, password?: string) {
+    if (!password) throw new Error("Password required to decrypt.");
+
+    // 1. Derive Secrets (Must match Encode)
+    const { key, seed } = await deriveSecrets(password);
+
+    const bodyValidCount = (pixels.length / 4) * 3;
+    const iterator = createScatterIterator(seed, bodyValidCount, pixels, width);
+
+    // Helper to read N bits from the scatter stream
+    const readBits = (count: number): string => {
         let bits = "";
         for(let i=0; i<count; i++) {
-            while ((ptr + 1) % 4 === 0) ptr++;
-            bits += (pixels[ptr] & 1).toString();
-            ptr++;
+             const targetIdx = iterator.next();
+             bits += (pixels[targetIdx] & 1).toString();
         }
         return bits;
     };
 
-    // --- Read Sequential Header ---
-    const sig = readSequentialBits(SIG_BITS); // 16 bits
-
-    const isSecureLocked = (sig === SIG_LOCKED_SECURE || sig === SIG_LOCKED_RAW_SECURE);
-    const isUnlocked = (sig === SIG_UNLOCKED || sig === SIG_UNLOCKED_RAW);
-
-    if (!isSecureLocked && !isUnlocked) {
-        if (sig === "0100010001001100" || sig === "0100010001001011") {
-             throw new Error("Legacy format detected. This secure version does not support old images.");
-        }
-        throw new Error("No DontSee signature found");
-    }
-
-    const saltBits = readSequentialBits(SALT_BITS); // 128 bits
-    const salt = new Uint8Array(16);
-    for(let i=0; i<16; i++) salt[i] = parseInt(saltBits.slice(i*8, (i+1)*8), 2);
-
-    // --- Initialize LCG ---
-    const headerEndIndex = ptr;
-    const headerValidCount = countValidBytes(headerEndIndex);
-    const totalValidCount = (pixels.length / 4) * 3;
-    const bodyValidCount = totalValidCount - headerValidCount;
-
-    let seed: number;
-    if (isSecureLocked) {
-        seed = await deriveScatteringSeed(salt, password || "");
-    } else {
-        const saltView = new DataView(salt.buffer);
-        seed = saltView.getUint32(0, true);
-    }
-
-    const { start, step } = initLCG(seed, bodyValidCount);
-
-    // --- Read Scattered Payload ---
-    // We need to read bits one by one from the LCG stream.
-
-    let currentScatteredBitIndex = 0;
-
-    const readScatteredBits = (count: number) => {
-        let bits = "";
-        for(let i=0; i<count; i++) {
-            const logicalBodyIndex = (start + (currentScatteredBitIndex + i) * step) % bodyValidCount;
-            const absoluteLogicalIndex = headerValidCount + logicalBodyIndex;
-            const targetIdx = getPhysicalIndex(absoluteLogicalIndex);
-            bits += (pixels[targetIdx] & 1).toString();
-        }
-        currentScatteredBitIndex += count;
-        return bits;
-    };
-
-    // 1. Read IV (96 bits)
-    const ivBits = readScatteredBits(IV_BITS);
+    // 2. Read IV
+    const ivBits = readBits(IV_BITS);
     const iv = new Uint8Array(12);
     for(let i=0; i<12; i++) iv[i] = parseInt(ivBits.slice(i*8, (i+1)*8), 2);
 
-    // 2. Read Length (32 bits)
-    const lenBits = readScatteredBits(LENGTH_BITS);
+    // 3. Read Length
+    const lenBits = readBits(LENGTH_BITS);
     const dataBitLength = parseInt(lenBits, 2);
 
-    // FIX 1: Length Bomb Validation
-    const maxPossibleBits = bodyValidCount - (IV_BITS + LENGTH_BITS);
-    if (dataBitLength <= 0 || dataBitLength > maxPossibleBits) {
-        throw new Error("Corrupt header or invalid length (DoS protection)");
+    // Sanity Check
+    if (dataBitLength <= 0 || dataBitLength > bodyValidCount) {
+        throw new Error("Invalid password or no message found.");
     }
 
-    // 3. Read Body
-    const bodyBits = new Uint8Array(dataBitLength);
+    // 4. Read Body
+    const encryptedBytes = new Uint8Array(Math.ceil(dataBitLength / 8));
     let lastReportTime = performance.now();
 
     for (let i = 0; i < dataBitLength; i++) {
         if (i % 1000 === 0) {
-            const now = performance.now();
+             const now = performance.now();
             if (now - lastReportTime > 33) {
                 const progress = Math.floor((i / dataBitLength) * 100);
                 postMessage({ id, success: true, progress });
@@ -358,74 +307,51 @@ async function handleDecode(id: string, pixels: PixelArray, password?: string) {
             }
         }
 
-        // Manually inline bit read logic for performance/consistency with encode loop
-        const logicalBodyIndex = (start + (currentScatteredBitIndex + i) * step) % bodyValidCount;
-        const absoluteLogicalIndex = headerValidCount + logicalBodyIndex;
-        const targetIdx = getPhysicalIndex(absoluteLogicalIndex);
+        const targetIdx = iterator.next();
+        const bit = pixels[targetIdx] & 1;
 
-        bodyBits[i] = pixels[targetIdx] & 1;
-    }
-
-    postMessage({ id, success: true, progress: 100 });
-
-    const encryptedBytes = new Uint8Array(dataBitLength / 8);
-    for(let i=0; i<encryptedBytes.length; i++) {
-        let byteVal = 0;
-        for(let bit=0; bit<8; bit++) {
-            byteVal = (byteVal << 1) | bodyBits[i*8 + bit];
+        const byteIdx = Math.floor(i / 8);
+        const bitIdx = 7 - (i % 8);
+        if (bit) {
+            encryptedBytes[byteIdx] |= (1 << bitIdx);
         }
-        encryptedBytes[i] = byteVal;
     }
 
-    // Decrypt
+    // 5. Decrypt with AAD Check
     try {
-        const key = await deriveKey(password || "", salt);
+        const aad = new TextEncoder().encode(`${width}x${height}:${pixels.length}`);
 
-        const decryptedBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, encryptedBytes);
+        const decryptedBuf = await crypto.subtle.decrypt(
+            { name: "AES-GCM", iv: iv, additionalData: aad },
+            key,
+            encryptedBytes
+        );
         const decryptedBytes = new Uint8Array(decryptedBuf);
 
-        // FIX 2: Garbage Output Check (Magic Bytes)
+        // Decompress if needed
         let text: string;
-
-        // Check GZIP Magic Bytes (0x1F 0x8B)
         const isGzip = decryptedBytes.length >= 2 && decryptedBytes[0] === 0x1F && decryptedBytes[1] === 0x8B;
 
         if (isGzip) {
             if (supportsCompression()) {
                 text = await decompress(decryptedBytes);
             } else {
-                throw new Error("Message is compressed but browser doesn't support decompression.");
+                // If browser lacks compression support but message is compressed, we can't read it.
+                // However, our supportsCompression check in encode prevents this scenario mostly.
+                throw new Error("Compressed data found but decompression unsupported.");
             }
         } else {
-            // Not GZIP -> Treat as raw text
             text = new TextDecoder().decode(decryptedBytes);
         }
 
         postMessage({ id, success: true, text });
-    } catch(e) {
-        const msg = e instanceof Error ? e.message : "Decryption failed";
-        postMessage({ id, success: false, error: msg === "Decryption failed" ? "Decryption failed" : msg });
-    }
-}
 
-function handleScan(id: string, pixels: PixelArray) {
-    let ptr = 0;
-    let sig = "";
-    // Read 16 bits sequentially
-    for(let i=0; i<SIG_BITS; i++) {
-        while ((ptr + 1) % 4 === 0) ptr++;
-        sig += (pixels[ptr] & 1).toString();
-        ptr++;
+    } catch (e) {
+        // IMPORTANT: In True Stego, a decryption failure usually means "Wrong Password" OR "No Message Here".
+        // The scatter pattern was wrong, so we read garbage, so Auth Tag check failed.
+        // We return a generic error.
+        postMessage({ id, success: false, error: "No hidden message found with this password." });
     }
-
-    let result = null;
-    if (sig === SIG_LOCKED_SECURE || sig === SIG_LOCKED_RAW_SECURE) {
-        result = 'locked';
-    } else if (sig === SIG_UNLOCKED || sig === SIG_UNLOCKED_RAW) {
-        result = 'unlocked';
-    }
-
-    postMessage({ id, success: true, signature: result });
 }
 
 self.onmessage = async (e: MessageEvent) => {
@@ -455,8 +381,8 @@ self.onmessage = async (e: MessageEvent) => {
             }
         } else if (imageData) {
             pixels = new Uint8ClampedArray(imageData);
-            width = 0;
-            height = 0;
+            width = imageData.width; // ImageData has width/height props
+            height = imageData.height;
         } else {
             throw new Error("No image data provided");
         }
@@ -464,9 +390,10 @@ self.onmessage = async (e: MessageEvent) => {
         if (type === 'encode') {
             await handleEncode(id, pixels, canvas, ctx, width, height, message, password);
         } else if (type === 'decode') {
-            await handleDecode(id, pixels, password);
+            await handleDecode(id, pixels, width, height, password);
         } else if (type === 'scan') {
-            handleScan(id, pixels);
+             // Scan is now impossible/irrelevant in True Stego
+             postMessage({ id, success: true, signature: null });
         }
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Unknown worker error";
