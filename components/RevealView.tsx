@@ -49,14 +49,14 @@ export const RevealView: React.FC<RevealViewProps> = ({
             )}
 
             {decodedMessage && (
-                <div className="animate-slide-up relative group">
-                    {/* Label Label */}
-                    <div className="absolute -top-3 left-4 bg-[#05050A] px-2 text-xs font-bold text-primary/80 uppercase tracking-wider z-10">
+                <div className="animate-slide-up relative group mt-2">
+                    {/* Label Label - Positioned perfectly to intersect border */}
+                    <div className="absolute -top-2.5 left-5 bg-[#05050A] px-2 text-[10px] font-bold text-primary/80 uppercase tracking-widest z-10 border border-white/5 rounded-full shadow-sm">
                         Decoded Text
                     </div>
 
                     {/* Expandable Container */}
-                    <div className="bg-white/5 border border-white/10 rounded-2xl p-5 min-h-[100px] max-h-[300px] flex flex-col shadow-inner transition-all duration-300">
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-5 pt-6 min-h-[100px] max-h-[300px] flex flex-col shadow-inner transition-all duration-300">
                          <div className="flex-1 w-full h-full overflow-y-auto pr-2 custom-scrollbar text-white/90 font-sans text-base leading-relaxed break-words whitespace-pre-wrap">
                             {decodedMessage}
                          </div>
