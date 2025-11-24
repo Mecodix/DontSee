@@ -50,14 +50,13 @@ export const RevealView: React.FC<RevealViewProps> = ({
 
             {decodedMessage && (
                 <div className="animate-slide-up mt-2">
-                    <fieldset className="border border-white/10 rounded-2xl p-5 pt-2 min-h-[100px] max-h-[300px] flex flex-col shadow-inner transition-all duration-300 bg-white/5">
-                        <legend className="px-2 text-[10px] font-bold text-primary/80 uppercase tracking-widest border border-white/5 rounded-full shadow-sm mx-4 bg-transparent">
-                            Decoded Text
-                        </legend>
-                         <div className="flex-1 w-full h-full overflow-y-auto pr-2 custom-scrollbar text-white/90 font-sans text-base leading-relaxed break-words whitespace-pre-wrap mt-2">
-                            {decodedMessage}
-                         </div>
-                    </fieldset>
+                    {/* Using ExpandableTextarea in Read-Only mode for Zen features */}
+                    <ExpandableTextarea
+                        value={decodedMessage}
+                        readOnly={true}
+                        label="Decoded Text"
+                        maxHeight="h-[200px]"
+                    />
                 </div>
             )}
 
