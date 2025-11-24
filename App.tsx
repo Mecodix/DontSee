@@ -12,6 +12,7 @@ import { usePasteHandler } from './hooks/usePasteHandler';
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 import { AppShell } from './components/layout/AppShell';
 import { Typography } from './components/ui/Typography';
+import { TypewriterSubtitle } from './components/TypewriterSubtitle';
 import { cn } from './utils/cn';
 
 // Helper to format bytes
@@ -34,32 +35,34 @@ const getHeaderContent = (
     if (isProcessing) {
         return {
              title: "Processing...",
+             typewriter: null,
              desc: "Performing cryptographic operations"
         };
     }
     if (isReading) {
         return {
             title: "Reading Image",
+            typewriter: null,
             desc: "Loading pixels into memory..."
         };
     }
     if (!image) {
         return {
-            title: "True Steganography",
-            desc: "Hide data invisibly. No signatures. No traces."
+            title: "Steganography",
+            typewriter: ["No Signatures.", "No Traces.", "Zero Knowledge Security.", "Invisible Encryption."],
+            desc: null
         };
     }
-    // With True Stego, we don't know if there is a message.
-    // So the header should reflect "Ready" state.
-    // However, if the user explicitly switches modes, we can update the title.
     if (mode === AppMode.HIDE) {
         return {
             title: "Secure Your Text",
-            desc: "Embed secret text. Password is required."
+            typewriter: null,
+            desc: "Embed secret text."
         };
     } else {
         return {
             title: "Reveal Secret",
+            typewriter: null,
             desc: "Enter password to search for hidden data."
         };
     }
@@ -183,7 +186,7 @@ const App: React.FC = () => {
         return `${progress}%`;
     };
 
-    const { title: headerTitle, desc: headerDesc } = getHeaderContent(
+    const { title: headerTitle, desc: headerDesc, typewriter } = getHeaderContent(
         isReading,
         image,
         mode,
@@ -213,9 +216,13 @@ const App: React.FC = () => {
                 )}>
                     {headerTitle}
                 </Typography>
-                <Typography variant="body" className="text-gray-500 max-w-sm mx-auto">
-                    {headerDesc}
-                </Typography>
+                {typewriter ? (
+                    <TypewriterSubtitle texts={typewriter} />
+                ) : (
+                    <Typography variant="body" className="text-gray-500 max-w-sm mx-auto">
+                        {headerDesc}
+                    </Typography>
+                )}
             </div>
 
             <div className="flex-1 flex flex-col gap-8 relative w-full">

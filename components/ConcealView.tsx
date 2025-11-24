@@ -107,7 +107,7 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Encryption Password (Optional)"
+                placeholder="Encryption Password"
                 startIcon={<IconLock className="w-5 h-5" />}
             />
 
@@ -137,7 +137,7 @@ export const ConcealView: React.FC<ConcealViewProps> = ({
                 <div className="relative overflow-hidden rounded-2xl group">
                      <Button
                         onClick={() => image && onEncode(image)}
-                        disabled={isProcessing || !message || isOverLimit}
+                        disabled={isProcessing || !message || isOverLimit || !password}
                         isLoading={isProcessing}
                         loadingText={getButtonLabel()}
                         icon={!isProcessing && <IconEyeOff className="w-5 h-5" />}
