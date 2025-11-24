@@ -110,7 +110,13 @@ export const useSteganography = () => {
 
         try {
             if (opId !== currentOperationId.current) return;
-            const bitmap = await createImageBitmap(image.imgObject);
+
+            // Explicitly prevent color space conversion and alpha premultiplication
+            // to preserve LSB integrity.
+            const bitmap = await createImageBitmap(image.imgObject, {
+                colorSpaceConversion: 'none',
+                premultiplyAlpha: 'none'
+            });
 
             if (opId !== currentOperationId.current) return;
             setStage('processing');
@@ -160,7 +166,12 @@ export const useSteganography = () => {
 
         try {
             if (opId !== currentOperationId.current) return;
-            const bitmap = await createImageBitmap(image.imgObject);
+
+            // Explicitly prevent color space conversion and alpha premultiplication
+            const bitmap = await createImageBitmap(image.imgObject, {
+                colorSpaceConversion: 'none',
+                premultiplyAlpha: 'none'
+            });
 
             if (opId !== currentOperationId.current) return;
             setStage('processing');
